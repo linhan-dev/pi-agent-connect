@@ -41,20 +41,17 @@ cargo run --release
 ### Install from Homebrew (macOS)
 
 ```bash
-brew tap nilh2a2/pico
+brew tap linhan-dev/pico
 brew install pico
 pico --version
 ```
 
-The tap (`homebrew-pico`) tracks the GitHub releases: tagging `vX.Y.Z` in
+The tap (`linhan-dev/homebrew-pico`) tracks the GitHub releases: tagging `vX.Y.Z` in
 this repo builds binaries and publishes a release; the tap formula updates
 itself automatically. A Homebrew tap must live in a public repository.
 
-> Note: the formula auto-update workflow lives in `homebrew-tap/` (templates
-> for the tap repo). Activate it by adding those two files to the tap repo
-> (`nilh2a2/homebrew-pico`): accept the collaborator invite and push, or
-> create the files via the GitHub web UI. The `Formula/pico.rb` itself is
-> already in place.
+> Note: the tap repo is created and its files pushed via `linhan-dev` SSH
+> identity. The formula auto-update workflow templates live in `homebrew-tap/`.
 >
 > Naming caveat: macOS ships a classic text editor also named `pico` at
 > `/usr/bin/pico`. On a default Homebrew setup `/opt/homebrew/bin` comes
