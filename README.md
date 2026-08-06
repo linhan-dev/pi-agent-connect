@@ -50,6 +50,17 @@ The tap (`homebrew-pico`) tracks the GitHub releases: tagging `vX.Y.Z` in
 this repo builds binaries and publishes a release; the tap formula updates
 itself automatically. A Homebrew tap must live in a public repository.
 
+> Note: the formula auto-update workflow lives in `homebrew-tap/` (templates
+> for the tap repo). Activate it by adding those two files to the tap repo
+> (`nilh2a2/homebrew-pico`): accept the collaborator invite and push, or
+> create the files via the GitHub web UI. The `Formula/pico.rb` itself is
+> already in place.
+>
+> Naming caveat: macOS ships a classic text editor also named `pico` at
+> `/usr/bin/pico`. On a default Homebrew setup `/opt/homebrew/bin` comes
+> first in `PATH` so `pico` resolves to this bot; on unusual shells check
+> `which pico`.
+
 
 SIGINT / SIGTERM shut down cleanly (abort the running pi task, announce,
 disconnect).
