@@ -30,6 +30,6 @@ jobs:
             echo "no formula changes"
           else
             version="$(sed -n 's/.*version "\(.*\)".*/\1/p' Formula/pico.rb)"
-            git commit -m "Update pico formula to ${version}"
+            git commit -m "Update pi-agent-connect formula to ${version}"
             git push
           fi

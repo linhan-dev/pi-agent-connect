@@ -1,11 +1,11 @@
-//! Message formatting (pure). All pico system messages carry the `[pico]` prefix,
+//! Message formatting (pure). All pico system messages carry the `[pi-agent-connect]` prefix,
 //! are in English and contain no emoji. Pi's own replies are forwarded as-is.
 
 use crate::agent::{AgentError, SessionState, SessionStats};
 
-pub const PREFIX: &str = "[pico]";
+pub const PREFIX: &str = "[pi-agent-connect]";
 
-pub fn pico(text: &str) -> String {
+pub fn system(text: &str) -> String {
     format!("{PREFIX} {text}")
 }
 
@@ -78,11 +78,11 @@ pub fn attachments_rejected() -> &'static str {
 }
 
 pub fn startup(cwd: &str, user: &str) -> String {
-    format!("pico started: cwd={cwd}, user={user}")
+    format!("pi-agent-connect started: cwd={cwd}, user={user}")
 }
 
 pub fn shutting_down() -> &'static str {
-    "pico shutting down"
+    "pi-agent-connect shutting down"
 }
 
 pub fn internal_error(msg: &str) -> String {
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn prefix() {
-        assert_eq!(pico("hi"), "[pico] hi");
+        assert_eq!(system("hi"), "[pi-agent-connect] hi");
     }
 
     #[test]

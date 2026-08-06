@@ -10,7 +10,7 @@ pub struct ChatError(pub String);
 
 #[async_trait]
 pub trait Chat: Send + Sync {
-    /// Send a full message (system messages already carry the `[pico]` prefix;
+    /// Send a full message (system messages already carry the `[pi-agent-connect]` prefix;
     /// pi replies are forwarded raw).
     async fn send(&self, text: String) -> Result<(), ChatError>;
     async fn send_typing(&self);

@@ -118,7 +118,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                             if !extra.is_empty() {
                                 ack = format!("{ack}; {}", extra.join(", "));
                             }
-                            let _ = self.chat.send(format::pico(&ack)).await;
+                            let _ = self.chat.send(format::system(&ack)).await;
                             continue;
                         }
                         Job::Abort => {
@@ -127,7 +127,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                             queue.clear();
                             self.drain_current(&mut current).await;
                             let ack = format::abort_ack(was_running, cleared);
-                            let _ = self.chat.send(format::pico(&ack)).await;
+                            let _ = self.chat.send(format::system(&ack)).await;
                             continue;
                         }
                         Job::Shutdown => {
@@ -142,7 +142,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                                 if is_prompt {
                                     let _ = self
                                         .chat
-                                        .send(format::pico(&format::queued(backlog)))
+                                        .send(format::system(&format::queued(backlog)))
                                         .await;
                                 }
                             } else {
@@ -175,7 +175,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                     let _ = current.take();
                     let _ = self
                         .chat
-                        .send(format::pico(&format::internal_error("agent task failed")))
+                        .send(format::system(&format::internal_error("agent task failed")))
                         .await;
                 }
                 None => {}
@@ -283,7 +283,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                             *known_session_id = Some(state.session_id.clone());
                             let _ = self
                                 .chat
-                                .send(format::pico(&format::new_session_info(&state)))
+                                .send(format::system(&format::new_session_info(&state)))
                                 .await;
                         }
                         Err(e) => {
@@ -293,46 +293,46 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                 }
             }
             TaskOutcome::Prompt { result: Err(e), .. } => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
             TaskOutcome::PromptTimedOut => {
                 let _ = self
                     .chat
-                    .send(format::pico(&format::prompt_timed_out(self.prompt_timeout.as_secs())))
+                    .send(format::system(&format::prompt_timed_out(self.prompt_timeout.as_secs())))
                     .await;
             }
             TaskOutcome::Session(Ok((state, stats))) => {
                 let _ = self
                     .chat
-                    .send(format::pico(&format::session_info(&state, stats.as_ref())))
+                    .send(format::system(&format::session_info(&state, stats.as_ref())))
                     .await;
             }
             TaskOutcome::Session(Err(e)) => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
             TaskOutcome::Model { model_ref, result: Ok(()) } => {
-                let _ = self.chat.send(format::pico(&format::model_set(&model_ref))).await;
+                let _ = self.chat.send(format::system(&format::model_set(&model_ref))).await;
             }
             TaskOutcome::Model { result: Err(e), .. } => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
             TaskOutcome::Models(Ok(models)) => {
-                let _ = self.chat.send(format::pico(&format::models_list(&models))).await;
+                let _ = self.chat.send(format::system(&format::models_list(&models))).await;
             }
             TaskOutcome::Models(Err(e)) => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
             TaskOutcome::Thinking { level, result: Ok(()) } => {
-                let _ = self.chat.send(format::pico(&format::thinking_set(&level))).await;
+                let _ = self.chat.send(format::system(&format::thinking_set(&level))).await;
             }
             TaskOutcome::Thinking { result: Err(e), .. } => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
             TaskOutcome::ThinkingLevels(Ok(levels)) => {
-                let _ = self.chat.send(format::pico(&format::levels_list(&levels))).await;
+                let _ = self.chat.send(format::system(&format::levels_list(&levels))).await;
             }
             TaskOutcome::ThinkingLevels(Err(e)) => {
-                let _ = self.chat.send(format::pico(&format::agent_error(&e))).await;
+                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
             }
         }
     }
@@ -524,11 +524,11 @@ mod tests {
         let chat = FakeChat::new();
         let (calls, messages) = drive(agent, chat, vec![Job::Prompt("hello".into())]).await;
 
-        // Pi reply is sent raw (no [pico] prefix).
+        // Pi reply is sent raw (no [pi-agent-connect] prefix).
         assert!(messages.iter().any(|m| m == "pi answer"), "{messages:?}");
         // First message since startup: background session info is posted.
         assert!(
-            messages.iter().any(|m| m.starts_with("[pico] new session: id=sess-1")),
+            messages.iter().any(|m| m.starts_with("[pi-agent-connect] new session: id=sess-1")),
             "{messages:?}"
         );
         assert_eq!(calls[0], "prompt(fresh=false):hello");
@@ -577,7 +577,7 @@ mod tests {
         let prompts: Vec<_> = calls.iter().filter(|c| c.starts_with("prompt")).cloned().collect();
         assert_eq!(prompts[0], "prompt(fresh=true):a");
         assert_eq!(prompts[1], "prompt(fresh=false):b");
-        assert!(messages.contains(&"[pico] ok, next message will start a new session".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] ok, next message will start a new session".to_string()));
     }
 
     #[tokio::test]
@@ -600,10 +600,10 @@ mod tests {
         let prompts: Vec<_> = calls.iter().filter(|c| c.starts_with("prompt")).cloned().collect();
         assert_eq!(prompts, vec!["prompt(fresh=false):a".to_string(), "prompt(fresh=true):c".to_string()]);
         assert!(calls.contains(&"abort".to_string()), "{calls:?}");
-        assert!(messages.contains(&"[pico] queued (backlog: 1)".to_string()), "{messages:?}");
+        assert!(messages.contains(&"[pi-agent-connect] queued (backlog: 1)".to_string()), "{messages:?}");
         assert!(
             messages.contains(
-                &"[pico] ok, next message will start a new session; aborted running task, cleared 1 queued message"
+                &"[pi-agent-connect] ok, next message will start a new session; aborted running task, cleared 1 queued message"
                     .to_string()
             ),
             "{messages:?}"
@@ -618,7 +618,7 @@ mod tests {
         let (calls, messages) =
             drive(agent, chat, vec![Job::Prompt("a".into()), Job::Abort]).await;
         assert!(calls.contains(&"abort".to_string()), "{calls:?}");
-        assert!(messages.contains(&"[pico] aborted running task".to_string()), "{messages:?}");
+        assert!(messages.contains(&"[pi-agent-connect] aborted running task".to_string()), "{messages:?}");
         // The aborted task's error must be suppressed.
         assert!(!messages.iter().any(|m| m.contains("pi exited with code")), "{messages:?}");
     }
@@ -628,7 +628,7 @@ mod tests {
         let agent = FakeAgent::new();
         let chat = FakeChat::new();
         let (_, messages) = drive(agent, chat, vec![Job::Abort]).await;
-        assert!(messages.contains(&"[pico] nothing was running".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] nothing was running".to_string()));
     }
 
     #[tokio::test]
@@ -638,7 +638,7 @@ mod tests {
         let chat = FakeChat::new();
         let (_, messages) = drive(agent, chat, vec![Job::Prompt("x".into())]).await;
         assert!(
-            messages.contains(&"[pico] pi exited with code 1: boom".to_string()),
+            messages.contains(&"[pi-agent-connect] pi exited with code 1: boom".to_string()),
             "{messages:?}"
         );
     }
@@ -659,7 +659,7 @@ mod tests {
         );
         worker.run().await;
         assert!(
-            chat.messages().contains(&"[pico] pi timed out after 1s, aborted".to_string()),
+            chat.messages().contains(&"[pi-agent-connect] pi timed out after 1s, aborted".to_string()),
             "{:?}",
             chat.messages()
         );
@@ -674,7 +674,7 @@ mod tests {
         assert!(calls.contains(&"get_state".to_string()));
         assert!(calls.contains(&"get_session_stats".to_string()));
         assert!(
-            messages.iter().any(|m| m.starts_with("[pico] session: id=sess-1") && m.contains("tokens: in=10 out=20")),
+            messages.iter().any(|m| m.starts_with("[pi-agent-connect] session: id=sess-1") && m.contains("tokens: in=10 out=20")),
             "{messages:?}"
         );
     }
@@ -698,10 +698,10 @@ mod tests {
         assert!(calls.contains(&"list_models".to_string()));
         assert!(calls.contains(&"set_thinking:high".to_string()));
         assert!(calls.contains(&"list_thinking_levels".to_string()));
-        assert!(messages.contains(&"[pico] model set to deepseek/x".to_string()));
-        assert!(messages.contains(&"[pico] available models: deepseek/a, qiuming/b".to_string()));
-        assert!(messages.contains(&"[pico] thinking level set to high".to_string()));
-        assert!(messages.contains(&"[pico] available levels: off, high".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] model set to deepseek/x".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] available models: deepseek/a, qiuming/b".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] thinking level set to high".to_string()));
+        assert!(messages.contains(&"[pi-agent-connect] available levels: off, high".to_string()));
     }
 
     #[tokio::test]

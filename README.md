@@ -1,4 +1,4 @@
-# pico
+# pi-agent-connect
 
 Minimal Discord DM gateway for the [pi coding agent](https://pi.dev). Rust single
 binary, foreground, one command. No database, no config file, no daemon, no own
@@ -6,22 +6,22 @@ session management.
 
 ## Principles
 
-- **pico does not manage pi's state.** Sessions, model and thinking settings all
-  belong to pi (`~/.pi/agent/`). pico only spawns `pi` and speaks its documented
-  CLI (print mode for messages, short-lived RPC for commands).
+- **pi-agent-connect does not manage pi's state.** Sessions, model and thinking
+  settings all belong to pi (`~/.pi/agent/`). It only spawns `pi` and speaks its
+  documented CLI (print mode for messages, short-lived RPC for commands).
 - **Zero dependency on pi's npm SDK.** Only the `pi` binary on `PATH` is used.
-- **System messages are prefixed with `[pico]`** (English, no emoji); pi replies
-  are forwarded as-is.
+- **System messages are prefixed with `[pi-agent-connect]`** (English, no emoji);
+  pi replies are forwarded as-is.
 - **Reply/quote metadata on Discord messages is ignored**, matching the pi
   terminal experience.
 
 ## Configuration (environment variables only)
 
-| Variable             | Required | Meaning                                             |
-|----------------------|----------|-----------------------------------------------------|
-| `PICO_DISCORD_TOKEN` | yes      | Discord bot token; missing = refuse to start        |
-| `PICO_ALLOWED_USER`  | no       | Single Discord user id. Empty = **lockdown mode** (start, audit-log every message to stdout, process nothing) |
-| `PICO_CWD`           | no       | pi working directory (default: `$HOME`)             |
+| Variable                           | Required | Meaning                                             |
+|------------------------------------|----------|-----------------------------------------------------|
+| `PI_AGENT_CONNECT_DISCORD_TOKEN`   | yes      | Discord bot token; missing = refuse to start        |
+| `PI_AGENT_CONNECT_ALLOWED_USER`    | no       | Single Discord user id. Empty = **lockdown mode** (start, audit-log every message to stdout, process nothing) |
+| `PI_AGENT_CONNECT_CWD`             | no       | pi working directory (default: `$HOME`)             |
 
 Model and thinking level are NOT configurable here: pi reads its own
 `~/.pi/agent/settings.json`.
@@ -29,50 +29,43 @@ Model and thinking level are NOT configurable here: pi reads its own
 ## Run
 
 ```bash
-cd ~/projects/pico
-export PICO_DISCORD_TOKEN="..."        # required
-export PICO_ALLOWED_USER="1234567890"  # find your own id: run once in lockdown, DM the bot, read the audit log
-export PICO_CWD="/path/to/workdir"     # optional
+cd ~/projects/pi-agent-connect
+export PI_AGENT_CONNECT_DISCORD_TOKEN="..."        # required
+export PI_AGENT_CONNECT_ALLOWED_USER="1234567890"  # find your own id: run once in lockdown, DM the bot, read the audit log
+export PI_AGENT_CONNECT_CWD="/path/to/workdir"     # optional
 
 cargo run --release
-# or build once: cargo build --release && ./target/release/pico
+# or build once: cargo build --release && ./target/release/pi-agent-connect
 ```
-
-### Install from Homebrew (macOS)
-
-```bash
-brew tap linhan-dev/pico
-brew install pico
-pico --version
-```
-
-The tap (`linhan-dev/homebrew-pico`) tracks the GitHub releases: tagging `vX.Y.Z` in
-this repo builds binaries and publishes a release; the tap formula updates
-itself automatically. A Homebrew tap must live in a public repository.
-
-> Note: the tap repo is created and its files pushed via `linhan-dev` SSH
-> identity. The formula auto-update workflow templates live in `homebrew-tap/`.
->
-> Naming caveat: macOS ships a classic text editor also named `pico` at
-> `/usr/bin/pico`. On a default Homebrew setup `/opt/homebrew/bin` comes
-> first in `PATH` so `pico` resolves to this bot; on unusual shells check
-> `which pico`.
-
 
 SIGINT / SIGTERM shut down cleanly (abort the running pi task, announce,
 disconnect).
 
+### Install from Homebrew (macOS)
+
+```bash
+brew tap linhan-dev/pi-agent-connect
+brew install pi-agent-connect
+pi-agent-connect --version
+```
+
+The tap (`linhan-dev/homebrew-pi-agent-connect`) tracks the GitHub releases:
+tagging `vX.Y.Z` in this repo builds binaries and publishes a release, then
+dispatches an event to the tap which updates its formula immediately (a cron
+every 30 min is kept as fallback). A Homebrew tap must live in a public
+repository.
+
 ## Commands (plain text, no registered slash commands)
 
-| Command          | Alias | Action                                                          |
-|------------------|-------|-----------------------------------------------------------------|
-| `/new`           | `/n`  | Abort task, clear queue; next message starts a fresh session    |
-| `/abort`         | `/a`  | Abort the running task, clear queue                             |
-| `/session`       | `/s`  | Session id / file / model / thinking / tokens via pi RPC        |
-| `/model <ref>`   | `/m`  | Switch model (`provider/modelId`, persists in pi settings)      |
-| `/model`         |       | List available models                                           |
-| `/thinking <lvl>`| `/t`  | Set thinking level (persists in pi settings)                    |
-| `/thinking`      |       | List available levels                                           |
+| Command            | Alias | Action                                                        |
+|--------------------|-------|---------------------------------------------------------------|
+| `/new`             | `/n`  | Abort task, clear queue; next message starts a fresh session  |
+| `/abort`           | `/a`  | Abort the running task, clear queue                           |
+| `/session`         | `/s`  | Session id / file / model / thinking / tokens via pi RPC      |
+| `/model <ref>`     | `/m`  | Switch model (`provider/modelId`, persists in pi settings)    |
+| `/model`           |       | List available models                                         |
+| `/thinking <lvl>`  | `/t`  | Set thinking level (persists in pi settings)                  |
+| `/thinking`        |       | List available levels                                         |
 
 Unknown `/...` replies with the command list. Attachments are rejected with an
 error (v1: no file transfer).

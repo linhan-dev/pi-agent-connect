@@ -1,8 +1,8 @@
 //! Configuration: everything comes from environment variables, no config file.
 //!
-//! - `PICO_DISCORD_TOKEN` (required, fail fast)
-//! - `PICO_ALLOWED_USER` (single Discord user id; empty/missing = lockdown mode)
-//! - `PICO_CWD` (pi working directory, default: `$HOME`)
+//! - `PI_AGENT_CONNECT_DISCORD_TOKEN` (required, fail fast)
+//! - `PI_AGENT_CONNECT_ALLOWED_USER` (single Discord user id; empty/missing = lockdown mode)
+//! - `PI_AGENT_CONNECT_CWD` (pi working directory, default: `$HOME`)
 
 use std::path::PathBuf;
 
@@ -17,10 +17,10 @@ pub struct Config {
 impl Config {
     /// Load from the process environment. Fails fast if the token is missing.
     pub fn load() -> Result<Config, String> {
-        let token = std::env::var("PICO_DISCORD_TOKEN")
-            .map_err(|_| "PICO_DISCORD_TOKEN is required (set it in the environment)".to_string())?;
-        let allowed_user = parse_allowed_user(std::env::var("PICO_ALLOWED_USER").ok());
-        let cwd = std::env::var("PICO_CWD")
+        let token = std::env::var("PI_AGENT_CONNECT_DISCORD_TOKEN")
+            .map_err(|_| "PI_AGENT_CONNECT_DISCORD_TOKEN is required (set it in the environment)".to_string())?;
+        let allowed_user = parse_allowed_user(std::env::var("PI_AGENT_CONNECT_ALLOWED_USER").ok());
+        let cwd = std::env::var("PI_AGENT_CONNECT_CWD")
             .ok()
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from)
@@ -57,8 +57,8 @@ mod tests {
 
     #[test]
     fn load_missing_token_fails() {
-        // No PICO_DISCORD_TOKEN in a clean-ish env: use a scoped removal.
-        unsafe { std::env::remove_var("PICO_DISCORD_TOKEN") };
+        // No PI_AGENT_CONNECT_DISCORD_TOKEN in a clean-ish env: use a scoped removal.
+        unsafe { std::env::remove_var("PI_AGENT_CONNECT_DISCORD_TOKEN") };
         assert!(Config::load().is_err());
     }
 }

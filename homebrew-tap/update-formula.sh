@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SRC_REPO="linhan-dev/pico"
-FORMULA="Formula/pico.rb"
+FORMULA="Formula/pi-agent-connect.rb"
 
 release_json="$(gh api "repos/${SRC_REPO}/releases/latest")"
 tag="$(jq -r .tag_name <<<"$release_json")"
@@ -19,8 +19,8 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-arm_url="https://github.com/${SRC_REPO}/releases/download/${tag}/pico-aarch64-apple-darwin.tar.gz"
-x64_url="https://github.com/${SRC_REPO}/releases/download/${tag}/pico-x86_64-apple-darwin.tar.gz"
+arm_url="https://github.com/${SRC_REPO}/releases/download/${tag}/pi-agent-connect-aarch64-apple-darwin.tar.gz"
+x64_url="https://github.com/${SRC_REPO}/releases/download/${tag}/pi-agent-connect-x86_64-apple-darwin.tar.gz"
 
 curl -fsSL -o "$tmp/arm.tgz" "$arm_url"
 curl -fsSL -o "$tmp/x64.tgz" "$x64_url"
@@ -30,7 +30,7 @@ x64_sha="$(shasum -a 256 "$tmp/x64.tgz" | cut -d' ' -f1)"
 
 mkdir -p "$(dirname "$FORMULA")"
 cat > "$FORMULA" <<EOF
-class Pico < Formula
+class PiAgentConnect < Formula
   desc "Minimal Discord DM gateway for the pi coding agent"
   homepage "https://github.com/linhan-dev/pico"
   license "MIT"

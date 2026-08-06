@@ -1,4 +1,4 @@
-//! pico — minimal Discord DM gateway for the pi coding agent.
+//! pi-agent-connect — minimal Discord DM gateway for the pi coding agent.
 //!
 //! Foreground single binary. No database, no config file, no daemon.
 //! Everything is configured through environment variables.
@@ -87,13 +87,13 @@ impl EventHandler for Handler {
             router::Classification { decision: Decision::RejectAttachments, .. } => {
                 let _ = msg
                     .channel_id
-                    .say(&ctx.http, format::pico(format::attachments_rejected()))
+                    .say(&ctx.http, format::system(format::attachments_rejected()))
                     .await;
             }
             router::Classification { decision: Decision::UnknownCommand, .. } => {
                 let _ = msg
                     .channel_id
-                    .say(&ctx.http, format::pico(format::commands_list()))
+                    .say(&ctx.http, format::system(format::commands_list()))
                     .await;
             }
             router::Classification { decision, .. } => {
@@ -107,7 +107,7 @@ impl EventHandler for Handler {
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("pico {}", env!("CARGO_PKG_VERSION"));
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
 
@@ -122,7 +122,7 @@ async fn main() {
     tracing::info!(
         cwd = %config.cwd.display(),
         mode = if config.allowed_user.is_some() { "normal" } else { "lockdown" },
-        "pico starting"
+        "pi-agent-connect starting"
     );
 
     let intents = GatewayIntents::DIRECT_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
@@ -144,7 +144,7 @@ async fn main() {
             let uid: u64 = match user.parse() {
                 Ok(v) => v,
                 Err(_) => {
-                    eprintln!("PICO_ALLOWED_USER must be a numeric Discord user id, got: {user}");
+                    eprintln!("PI_AGENT_CONNECT_ALLOWED_USER must be a numeric Discord user id, got: {user}");
                     std::process::exit(1);
                 }
             };
@@ -152,7 +152,7 @@ async fn main() {
                 Ok(dm) => {
                     dchat.set_channel(dm.id);
                     let msg = format::startup(&config.cwd.display().to_string(), user);
-                    if let Err(e) = dchat.send(format::pico(&msg)).await {
+                    if let Err(e) = dchat.send(format::system(&msg)).await {
                         tracing::error!(error = %e.0, "failed to send startup message");
                     }
                     tracing::info!(user = %user, "startup message sent");
@@ -180,12 +180,12 @@ async fn main() {
     tokio::spawn(async move {
         shutdown_signal().await;
         tracing::info!("shutdown signal received");
-        let _ = signal_chat.send(format::pico(format::shutting_down())).await;
+        let _ = signal_chat.send(format::system(format::shutting_down())).await;
         signal_agent.abort().await;
         let _ = signal_tx.send(Job::Shutdown);
         let _ = tokio::time::timeout(Duration::from_secs(20), worker_task).await;
         shard_manager.shutdown_all().await;
-        tracing::info!("pico stopped");
+        tracing::info!("pi-agent-connect stopped");
     });
 
     if let Err(e) = client.start().await {

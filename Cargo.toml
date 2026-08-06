@@ -1,6 +1,6 @@
 [package]
-name = "pico"
-version = "0.1.0"
+name = "pi-agent-connect"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
 

@@ -1,6 +1,6 @@
 //! Port for the pi CLI (the only external AI dependency).
 //!
-//! pico treats pi as a black box and talks to it only through its documented
+//! pi-agent-connect treats pi as a black box and talks to it only through its documented
 //! CLI: print mode (`pi -c -p "…"`) for messages, and short-lived RPC mode
 //! (`pi --mode rpc --continue`) for session/model/thinking commands.
 //! There is intentionally NO dependency on pi's npm SDK.
@@ -477,7 +477,7 @@ trailing junk
     #[tokio::test]
     #[ignore = "manual smoke: requires the real pi binary (no model calls)"]
     async fn smoke_real_agent_rpc() {
-        let dir = std::env::temp_dir().join("pico-smoke");
+        let dir = std::env::temp_dir().join("pi-agent-connect-smoke");
         std::fs::create_dir_all(&dir).expect("create smoke dir");
         let agent = RealAgent::new("pi".into(), dir);
         let state = agent.get_state().await.expect("get_state");
