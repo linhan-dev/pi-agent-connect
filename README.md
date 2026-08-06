@@ -38,6 +38,19 @@ cargo run --release
 # or build once: cargo build --release && ./target/release/pico
 ```
 
+### Install from Homebrew (macOS)
+
+```bash
+brew tap nilh2a2/pico
+brew install pico
+pico --version
+```
+
+The tap (`homebrew-pico`) tracks the GitHub releases: tagging `vX.Y.Z` in
+this repo builds binaries and publishes a release; the tap formula updates
+itself automatically. A Homebrew tap must live in a public repository.
+
+
 SIGINT / SIGTERM shut down cleanly (abort the running pi task, announce,
 disconnect).
 

@@ -105,6 +105,12 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("pico {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
     init_tracing();
     let config = match config::Config::load() {
         Ok(c) => c,
@@ -119,8 +125,7 @@ async fn main() {
         "pico starting"
     );
 
-    let intents =
-        GatewayIntents::DIRECT_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+    let intents = GatewayIntents::DIRECT_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
     let (tx, rx) = mpsc::unbounded_channel::<Job>();
     let handler = Handler {
         tx: tx.clone(),
