@@ -102,3 +102,7 @@ DMs can slot in. PRs welcome.
 ## License
 
 MIT
+
+## Thanks
+
+Inspired by [Crokily/pi-discord-gateway](https://github.com/Crokily/pi-discord-gateway).

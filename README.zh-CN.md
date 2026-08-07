@@ -86,3 +86,7 @@ Discord events ──► Router (pure) ──► Worker (single consumer, in-mem
 ## 许可
 
 MIT
+
+## 致谢
+
+本项目受 [Crokily/pi-discord-gateway](https://github.com/Crokily/pi-discord-gateway) 启发。
