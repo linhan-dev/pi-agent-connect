@@ -90,3 +90,7 @@ MIT
 ## 致谢
 
 本项目受 [Crokily/pi-discord-gateway](https://github.com/Crokily/pi-discord-gateway) 启发。
+
+## 讨论
+
+- https://linux.do/u/linhan
