@@ -1,8 +1,8 @@
 //! Configuration: everything comes from environment variables, no config file.
 //!
-//! - `PI_AGENT_CONNECT_DISCORD_TOKEN` (required, fail fast)
-//! - `PI_AGENT_CONNECT_ALLOWED_USER` (single Discord user id; empty/missing = lockdown mode)
-//! - `PI_AGENT_CONNECT_CWD` (pi working directory, default: `$HOME`)
+//! - `PIAC_DISCORD_TOKEN` (required, fail fast)
+//! - `PIAC_DISCORD_ALLOWED_USER_ID` (single Discord user id; empty/missing = lockdown mode)
+//! - `PIAC_CWD` (pi working directory, default: launch cwd / `pwd`)
 
 use std::path::PathBuf;
 
@@ -17,15 +17,15 @@ pub struct Config {
 impl Config {
     /// Load from the process environment. Fails fast if the token is missing.
     pub fn load() -> Result<Config, String> {
-        let token = std::env::var("PI_AGENT_CONNECT_DISCORD_TOKEN").map_err(|_| {
-            "PI_AGENT_CONNECT_DISCORD_TOKEN is required (set it in the environment)".to_string()
+        let token = std::env::var("PIAC_DISCORD_TOKEN").map_err(|_| {
+            "PIAC_DISCORD_TOKEN is required (set it in the environment)".to_string()
         })?;
-        let allowed_user = parse_allowed_user(std::env::var("PI_AGENT_CONNECT_ALLOWED_USER").ok());
-        let cwd = std::env::var("PI_AGENT_CONNECT_CWD")
+        let allowed_user = parse_allowed_user(std::env::var("PIAC_DISCORD_ALLOWED_USER_ID").ok());
+        let cwd = std::env::var("PIAC_CWD")
             .ok()
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from)
-            .unwrap_or_else(home_dir);
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         Ok(Config {
             discord_token: token,
             allowed_user,
@@ -49,7 +49,7 @@ impl Config {
         let _ = writeln!(
             out,
             "  {:<32} {}  (required)",
-            "PI_AGENT_CONNECT_DISCORD_TOKEN",
+            "PIAC_DISCORD_TOKEN",
             mask_secret(&self.discord_token)
         );
         match &self.allowed_user {
@@ -57,26 +57,26 @@ impl Config {
                 let _ = writeln!(
                     out,
                     "  {:<32} {user}  (normal mode)",
-                    "PI_AGENT_CONNECT_ALLOWED_USER"
+                    "PIAC_DISCORD_ALLOWED_USER_ID"
                 );
             }
             None => {
                 let _ = writeln!(
                     out,
                     "  {:<32} (unset)  (lockdown mode)",
-                    "PI_AGENT_CONNECT_ALLOWED_USER"
+                    "PIAC_DISCORD_ALLOWED_USER_ID"
                 );
             }
         }
-        let cwd_source = if env_has("PI_AGENT_CONNECT_CWD") {
-            "from PI_AGENT_CONNECT_CWD"
+        let cwd_source = if env_has("PIAC_CWD") {
+            "from PIAC_CWD"
         } else {
-            "defaulted to $HOME"
+            "defaulted to launch cwd"
         };
         let _ = writeln!(
             out,
             "  {:<32} {}  ({cwd_source})",
-            "PI_AGENT_CONNECT_CWD",
+            "PIAC_CWD",
             self.cwd.display()
         );
         out
@@ -109,12 +109,6 @@ fn env_has(name: &str) -> bool {
 /// Trim and normalize the optional whitelist value. Empty = no whitelist (lockdown).
 pub fn parse_allowed_user(raw: Option<String>) -> Option<String> {
     raw.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-}
-
-fn home_dir() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
 }
 
 #[cfg(test)]
@@ -152,15 +146,15 @@ mod tests {
         );
         assert!(s.contains("****oken"), "only the tail may be shown");
         assert!(s.contains("123456789"));
-        assert!(s.contains("PI_AGENT_CONNECT_DISCORD_TOKEN"));
-        assert!(s.contains("PI_AGENT_CONNECT_ALLOWED_USER"));
-        assert!(s.contains("PI_AGENT_CONNECT_CWD"));
+        assert!(s.contains("PIAC_DISCORD_TOKEN"));
+        assert!(s.contains("PIAC_DISCORD_ALLOWED_USER_ID"));
+        assert!(s.contains("PIAC_CWD"));
     }
 
     #[test]
     fn load_missing_token_fails() {
-        // No PI_AGENT_CONNECT_DISCORD_TOKEN in a clean-ish env: use a scoped removal.
-        unsafe { std::env::remove_var("PI_AGENT_CONNECT_DISCORD_TOKEN") };
+        // No PIAC_DISCORD_TOKEN in a clean-ish env: use a scoped removal.
+        unsafe { std::env::remove_var("PIAC_DISCORD_TOKEN") };
         assert!(Config::load().is_err());
     }
 }

@@ -156,7 +156,7 @@ async fn main() {
                 Ok(v) => v,
                 Err(_) => {
                     eprintln!(
-                        "PI_AGENT_CONNECT_ALLOWED_USER must be a numeric Discord user id, got: {user}"
+                        "PIAC_DISCORD_ALLOWED_USER_ID must be a numeric Discord user id, got: {user}"
                     );
                     std::process::exit(1);
                 }

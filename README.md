@@ -19,9 +19,9 @@ session management.
 
 | Variable                           | Required | Meaning                                             |
 |------------------------------------|----------|-----------------------------------------------------|
-| `PI_AGENT_CONNECT_DISCORD_TOKEN`   | yes      | Discord bot token; missing = refuse to start        |
-| `PI_AGENT_CONNECT_ALLOWED_USER`    | no       | Single Discord user id. Empty = **lockdown mode** (start, audit-log every message to stdout, process nothing) |
-| `PI_AGENT_CONNECT_CWD`             | no       | pi working directory (default: `$HOME`)             |
+| `PIAC_DISCORD_TOKEN`           | yes      | Discord bot token; missing = refuse to start        |
+| `PIAC_DISCORD_ALLOWED_USER_ID` | no       | Single Discord user id. Empty = **lockdown mode** (start, audit-log every message to stdout, process nothing) |
+| `PIAC_CWD`                     | no       | pi working directory (default: launch cwd / `pwd`)  |
 
 Model and thinking level are NOT configurable here: pi reads its own
 `~/.pi/agent/settings.json`.
@@ -34,9 +34,9 @@ the logs whether the environment variables actually reached the process.
 
 ```bash
 cd ~/projects/pi-agent-connect
-export PI_AGENT_CONNECT_DISCORD_TOKEN="..."        # required
-export PI_AGENT_CONNECT_ALLOWED_USER="1234567890"  # find your own id: run once in lockdown, DM the bot, read the audit log
-export PI_AGENT_CONNECT_CWD="/path/to/workdir"     # optional
+export PIAC_DISCORD_TOKEN="..."                    # required
+export PIAC_DISCORD_ALLOWED_USER_ID="1234567890"    # find your own id: run once in lockdown, DM the bot, read the audit log
+export PIAC_CWD="/path/to/workdir"                 # optional
 
 cargo run --release
 # or build once: cargo build --release && ./target/release/pi-agent-connect
