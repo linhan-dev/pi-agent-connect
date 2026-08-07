@@ -1,9 +1,9 @@
 name: update-formula
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [release]
 
 permissions:
   contents: write
@@ -25,11 +25,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/pico.rb
+          git add Formula/pi-agent-connect.rb
           if git diff --cached --quiet; then
             echo "no formula changes"
           else
-            version="$(sed -n 's/.*version "\(.*\)".*/\1/p' Formula/pico.rb)"
+            version="$(sed -n 's/.*version "\(.*\)".*/\1/p' Formula/pi-agent-connect.rb)"
             git commit -m "Update pi-agent-connect formula to ${version}"
             git push
           fi

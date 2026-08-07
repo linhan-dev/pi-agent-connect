@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Update Formula/pico.rb from the latest pico release.
-# Runs on a schedule and via workflow_dispatch; no-op if already current.
+# Update Formula/pi-agent-connect.rb from the latest pi-agent-connect release.
+# Triggered by repository_dispatch from the source repo's release workflow;
+# no-op if already current.
 set -euo pipefail
 
-SRC_REPO="linhan-dev/pico"
+SRC_REPO="linhan-dev/pi-agent-connect"
 FORMULA="Formula/pi-agent-connect.rb"
 
 release_json="$(gh api "repos/${SRC_REPO}/releases/latest")"
@@ -32,7 +33,7 @@ mkdir -p "$(dirname "$FORMULA")"
 cat > "$FORMULA" <<EOF
 class PiAgentConnect < Formula
   desc "Minimal Discord DM gateway for the pi coding agent"
-  homepage "https://github.com/linhan-dev/pico"
+  homepage "https://github.com/linhan-dev/pi-agent-connect"
   license "MIT"
   version "${version}"
 
@@ -47,11 +48,11 @@ class PiAgentConnect < Formula
   end
 
   def install
-    bin.install "pico"
+    bin.install "pi-agent-connect"
   end
 
   test do
-    system "#{bin}/pico", "--version"
+    system "#{bin}/pi-agent-connect", "--version"
   end
 end
 EOF

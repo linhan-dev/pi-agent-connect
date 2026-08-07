@@ -51,9 +51,17 @@ pi-agent-connect --version
 
 The tap (`linhan-dev/homebrew-pi-agent-connect`) tracks the GitHub releases:
 tagging `vX.Y.Z` in this repo builds binaries and publishes a release, then
-dispatches an event to the tap which updates its formula immediately (a cron
-every 30 min is kept as fallback). A Homebrew tap must live in a public
+dispatches an event to the tap which updates its formula immediately (requires
+the `TAP_TOKEN` secret; see below). A Homebrew tap must live in a public
 repository.
+
+To enable automatic tap updates, create a fine-grained personal access token
+with **Contents: Read and write** access limited to the tap repo
+`linhan-dev/homebrew-pi-agent-connect`, then store it as an Actions secret
+named `TAP_TOKEN` in *this* repo (Settings → Secrets and variables → Actions,
+or `gh secret set TAP_TOKEN -R linhan-dev/pi-agent-connect`). Without it the
+tap is not updated automatically — run the tap's `update-formula` workflow
+manually instead.
 
 ## Commands (plain text, no registered slash commands)
 

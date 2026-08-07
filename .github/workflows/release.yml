@@ -73,5 +73,5 @@ jobs:
               -f event_type=release
             echo "tap update dispatched"
           else
-            echo "TAP_TOKEN secret not set; the tap cron will update the formula within 30 minutes."
+            echo "TAP_TOKEN secret not set; tap update skipped. Set the secret, or run the tap's update-formula workflow manually."
           fi
