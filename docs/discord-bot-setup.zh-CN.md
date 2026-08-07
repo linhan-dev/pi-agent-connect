@@ -1,6 +1,6 @@
-# 创建 Discord bot 并私聊它
+# 创建 Discord bot
 
-**创建 bot、拿到 token、私聊它。pi-agent-connect 需要的一切，大约 5 分钟。**
+**创建 bot、拿到 token。pi-agent-connect 需要的一切，大约 5 分钟。**
 
 [English](discord-bot-setup.md) · [简体中文](discord-bot-setup.zh-CN.md)
 
@@ -26,15 +26,7 @@ Discord 规定，只有和 bot **在同一个服务器**的用户才能私聊它
 2. 勾选 `bot` scope。私聊不需要任何频道权限，可以全不勾。
 3. 复制生成的 URL，浏览器打开，选一个服务器，授权。
 
-## 5. 私聊 bot
-
-先启动 pi-agent-connect，然后私聊 bot。
-
-1. 在成员列表或任意频道里点 bot 的名字。
-2. 在弹出的资料卡里点 **Message**，私聊就打开了。
-3. 发一句 `/session` 检查连接，或者随便打个招呼。
-
-bot 离线时也会显示在成员列表里；但 pi-agent-connect 运行之前发的消息不会得到回复。
+启动 pi-agent-connect 并私聊 bot 的步骤见 [README](../README.zh-CN.md#安装)。
 
 ## 注意事项
 

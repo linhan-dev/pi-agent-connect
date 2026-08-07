@@ -53,21 +53,23 @@
 
    `PIAC_CWD`（可选）设置 pi 的工作目录；不设置就用启动时的当前目录。
 
+   `PIAC_COMMAND_PREFIX`（可选）不用设置，命令默认以 `.` 开头。
+
    可以把这些 export 写进 `~/.zshrc`，免去每次重敲。
 
 ## 用法
 
-纯文本命令，无需注册斜杠命令。
+纯文本命令，无需注册斜杠命令。命令以 `.` 开头：
 
 | 命令               | 别名 | 作用                                              |
 |--------------------|------|---------------------------------------------------|
-| `/new`             | `/n` | 终止当前任务，清空队列；下一条消息开启新 session                 |
-| `/abort`           | `/a` | 中止正在运行的任务，清空队列                       |
-| `/session`         | `/s` | 查看 session id / 文件 / 模型 / thinking / tokens  |
-| `/model [ref]`     | `/m` | 切换模型；不带参数列出可用模型                     |
-| `/thinking [lvl]`  | `/t` | 设置 thinking 等级；不带参数列出可选等级           |
+| `.new`             | `.n` | 终止当前任务，清空队列；下一条消息开启新 session                 |
+| `.abort`           | `.a` | 中止正在运行的任务，清空队列                       |
+| `.session`         | `.s` | 查看 session id / 文件 / 模型 / thinking / tokens  |
+| `.model [ref]`     | `.m` | 切换模型；不带参数列出可用模型                     |
+| `.thinking [lvl]`  | `.t` | 设置 thinking 等级；不带参数列出可选等级           |
 
-模型和 thinking 等级由 pi 自己管理（`~/.pi/agent/settings.json`）。随时可以在私聊里用 `/model` 和 `/thinking` 修改。
+模型和 thinking 等级由 pi 自己管理（`~/.pi/agent/settings.json`）。随时可以在私聊里用 `.model` 和 `.thinking` 修改。
 
 带 `[pi-agent-connect]` 前缀的消息来自 pi-agent-connect 本身；没有前缀的都是 pi agent 的回复，原样转发。
 

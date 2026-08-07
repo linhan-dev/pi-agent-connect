@@ -1,6 +1,6 @@
 # Setting Up a Discord Bot
 
-**Create a bot, grab its token, and DM it. That's everything pi-agent-connect
+**Create a bot and grab its token. That's everything pi-agent-connect
 needs, in about 5 minutes.**
 
 [English](discord-bot-setup.md) · [简体中文](discord-bot-setup.zh-CN.md)
@@ -37,16 +37,8 @@ bot to one of your servers first (a private server works fine).
    leave them all unchecked.
 3. Copy the generated URL, open it in a browser, pick a server, and authorize.
 
-## 5. DM the bot
-
-Start pi-agent-connect first, then DM the bot.
-
-1. Click the bot's name in the member list or in any channel.
-2. In the profile popup, hit **Message** to open a DM.
-3. Send `/session` to check the connection, or just say hello.
-
-The bot appears in the member list even while offline; messages sent before
-pi-agent-connect is running won't be answered.
+Starting pi-agent-connect and DMing the bot is covered in the
+[README](../README.md#setup).
 
 ## Notes
 

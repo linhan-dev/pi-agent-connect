@@ -63,22 +63,24 @@
    `PIAC_CWD` (optional) sets pi's working directory; it defaults to the directory
    you launched from.
 
+   `PIAC_COMMAND_PREFIX` (optional) leave unset; commands default to `.`.
+
    Keep the exports in `~/.zshrc` so you don't retype them every time.
 
 ## Usage
 
-Plain-text commands, no registered slash commands.
+Plain-text commands, no registered slash commands. Commands use a `.` prefix:
 
 | Command            | Alias | Action                                      |
 |--------------------|-------|---------------------------------------------|
-| `/new`             | `/n`  | Abort the running task, clear queue; next message starts a fresh session |
-| `/abort`           | `/a`  | Abort the running task, clear queue         |
-| `/session`         | `/s`  | Session id / file / model / thinking / tokens |
-| `/model [ref]`     | `/m`  | Switch model; list models with no arg       |
-| `/thinking [lvl]`  | `/t`  | Set thinking; list levels with no arg       |
+| `.new`             | `.n`  | Abort the running task, clear queue; next message starts a fresh session |
+| `.abort`           | `.a`  | Abort the running task, clear queue         |
+| `.session`         | `.s`  | Session id / file / model / thinking / tokens |
+| `.model [ref]`     | `.m`  | Switch model; list models with no arg       |
+| `.thinking [lvl]`  | `.t`  | Set thinking; list levels with no arg       |
 
 Model and thinking levels are pi's own (`~/.pi/agent/settings.json`). Change
-them anytime with `/model` and `/thinking` in the DM.
+them anytime with `.model` and `.thinking` in the DM.
 
 Messages prefixed `[pi-agent-connect]` come from the gateway itself; messages
 without the prefix are pi's replies, forwarded as-is.
