@@ -1,8 +1,8 @@
 //! Single-consumer message processor.
 //!
 //! One queue, one worker task, no locks. The event loop is the single
-//! producer; the worker is the single consumer. Control jobs (`/new`,
-//! `/abort`, shutdown) interrupt the currently running task; everything
+//! producer; the worker is the single consumer. Control jobs (`.new`,
+//! `.abort`, shutdown) interrupt the currently running task; everything
 //! else (prompts, session/model/thinking commands) is processed serially.
 //!
 //! Timeouts and abort live here (business layer), not in the agent adapter,
@@ -86,19 +86,19 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
 
         loop {
             // Start the next queued job when idle.
-            if current.is_none() {
-                if let Some(job) = queue.pop_front() {
-                    match job {
-                        Job::Shutdown => return,
-                        Job::Prompt(prompt) => {
-                            current = Some(self.start_prompt(prompt, fresh));
-                            fresh = false;
-                        }
-                        Job::Session => current = Some(self.start_session()),
-                        Job::Model(arg) => current = Some(self.start_model(arg)),
-                        Job::Thinking(arg) => current = Some(self.start_thinking(arg)),
-                        Job::New | Job::Abort => {}
+            if current.is_none()
+                && let Some(job) = queue.pop_front()
+            {
+                match job {
+                    Job::Shutdown => return,
+                    Job::Prompt(prompt) => {
+                        current = Some(self.start_prompt(prompt, fresh));
+                        fresh = false;
                     }
+                    Job::Session => current = Some(self.start_session()),
+                    Job::Model(arg) => current = Some(self.start_model(arg)),
+                    Job::Thinking(arg) => current = Some(self.start_thinking(arg)),
+                    Job::New | Job::Abort => {}
                 }
             }
             if current.is_none() && queue.is_empty() && rx_closed {

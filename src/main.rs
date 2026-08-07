@@ -72,8 +72,12 @@ impl EventHandler for Handler {
             has_attachments: !msg.attachments.is_empty(),
             content: msg.content.clone(),
         };
-        let classification =
-            router::classify(self.config.allowed_user.as_deref(), &bot_id, &incoming);
+        let classification = router::classify(
+            self.config.allowed_user.as_deref(),
+            &bot_id,
+            self.config.command_prefix,
+            &incoming,
+        );
         match classification {
             router::Classification {
                 decision: Decision::Drop,
@@ -108,7 +112,7 @@ impl EventHandler for Handler {
             } => {
                 let _ = msg
                     .channel_id
-                    .say(&ctx.http, format::system(format::commands_list()))
+                    .say(&ctx.http, format::system(&format::commands_list(self.config.command_prefix)))
                     .await;
             }
             router::Classification { decision, .. } => {

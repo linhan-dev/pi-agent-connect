@@ -68,8 +68,8 @@ pub fn cleared_msg(n: usize) -> String {
     }
 }
 
-pub fn commands_list() -> &'static str {
-    "commands: /new /abort /session /model /thinking"
+pub fn commands_list(prefix: char) -> String {
+    format!("commands: {prefix}new {prefix}abort {prefix}session {prefix}model {prefix}thinking")
 }
 
 pub fn queued(backlog: usize) -> String {
@@ -315,8 +315,12 @@ mod tests {
         assert_eq!(cleared_msg(1), "cleared 1 queued message");
         assert_eq!(queued(3), "queued (backlog: 3)");
         assert_eq!(
-            commands_list(),
-            "commands: /new /abort /session /model /thinking"
+            commands_list('.'),
+            "commands: .new .abort .session .model .thinking"
+        );
+        assert_eq!(
+            commands_list('!'),
+            "commands: !new !abort !session !model !thinking"
         );
     }
 }

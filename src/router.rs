@@ -36,7 +36,12 @@ pub struct Classification {
     pub audit: Option<AuditReason>,
 }
 
-pub fn classify(allowed_user: Option<&str>, bot_id: &str, msg: &IncomingMessage) -> Classification {
+pub fn classify(
+    allowed_user: Option<&str>,
+    bot_id: &str,
+    prefix: char,
+    msg: &IncomingMessage,
+) -> Classification {
     if msg.is_bot {
         return Classification {
             decision: Decision::Drop,
@@ -72,7 +77,7 @@ pub fn classify(allowed_user: Option<&str>, bot_id: &str, msg: &IncomingMessage)
             audit: None,
         };
     }
-    match parse(trimmed) {
+    match parse(trimmed, prefix) {
         ParseResult::Command(c) => Classification {
             decision: Decision::Command(c),
             audit: None,
@@ -110,32 +115,36 @@ mod tests {
         }
     }
 
+    fn classify_dot(allowed: Option<&str>, bot: &str, m: &IncomingMessage) -> Classification {
+        classify(allowed, bot, '.', m)
+    }
+
     #[test]
     fn bot_messages_dropped_silently() {
         let mut m = msg("123", "hello");
         m.is_bot = true;
-        let c = classify(Some("123"), "9", &m);
+        let c = classify_dot(Some("123"), "9", &m);
         assert_eq!(c.decision, Decision::Drop);
         assert_eq!(c.audit, None);
     }
 
     #[test]
     fn lockdown_drops_everything_with_audit() {
-        let c = classify(None, "9", &msg("999", "hello"));
+        let c = classify_dot(None, "9", &msg("999", "hello"));
         assert_eq!(c.decision, Decision::Drop);
         assert_eq!(c.audit, Some(AuditReason::Lockdown));
     }
 
     #[test]
     fn non_whitelisted_drops_with_audit() {
-        let c = classify(Some("123"), "9", &msg("456", "hello"));
+        let c = classify_dot(Some("123"), "9", &msg("456", "hello"));
         assert_eq!(c.decision, Decision::Drop);
         assert_eq!(c.audit, Some(AuditReason::NotWhitelisted));
     }
 
     #[test]
     fn whitelisted_message_routes_to_prompt() {
-        let c = classify(Some("123"), "9", &msg("123", "  hello there  "));
+        let c = classify_dot(Some("123"), "9", &msg("123", "  hello there  "));
         assert_eq!(c.decision, Decision::Prompt("hello there".to_string()));
         assert_eq!(c.audit, None);
     }
@@ -144,22 +153,22 @@ mod tests {
     fn attachments_rejected_even_with_text() {
         let mut m = msg("123", "fix this file");
         m.has_attachments = true;
-        let c = classify(Some("123"), "9", &m);
+        let c = classify_dot(Some("123"), "9", &m);
         assert_eq!(c.decision, Decision::RejectAttachments);
     }
 
     #[test]
     fn commands_and_unknown() {
         assert_eq!(
-            classify(Some("123"), "9", &msg("123", "/new")).decision,
+            classify_dot(Some("123"), "9", &msg("123", ".new")).decision,
             Decision::Command(Command::New)
         );
         assert_eq!(
-            classify(Some("123"), "9", &msg("123", "/n")).decision,
+            classify_dot(Some("123"), "9", &msg("123", ".n")).decision,
             Decision::Command(Command::New)
         );
         assert_eq!(
-            classify(Some("123"), "9", &msg("123", "/wat")).decision,
+            classify_dot(Some("123"), "9", &msg("123", ".wat")).decision,
             Decision::UnknownCommand
         );
     }
@@ -167,13 +176,13 @@ mod tests {
     #[test]
     fn mention_only_message_drops() {
         // A message consisting only of a bot mention becomes empty → drop.
-        let c = classify(Some("123"), "9", &msg("123", "<@9>"));
+        let c = classify_dot(Some("123"), "9", &msg("123", "<@9>"));
         assert_eq!(c.decision, Decision::Drop);
     }
 
     #[test]
     fn self_mentions_stripped_from_prompt() {
-        let c = classify(Some("123"), "9", &msg("123", "<@9> <@!9> summarize"));
+        let c = classify_dot(Some("123"), "9", &msg("123", "<@9> <@!9> summarize"));
         assert_eq!(c.decision, Decision::Prompt("summarize".to_string()));
     }
 

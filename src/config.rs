@@ -3,8 +3,14 @@
 //! - `PIAC_DISCORD_TOKEN` (required, fail fast)
 //! - `PIAC_DISCORD_ALLOWED_USER_ID` (single Discord user id; empty/missing = lockdown mode)
 //! - `PIAC_CWD` (pi working directory, default: launch cwd / `pwd`)
+//! - `PIAC_COMMAND_PREFIX` (optional, single symbol, default `.`)
 
 use std::path::PathBuf;
+
+/// Default command prefix. `.` is safe on every mainstream IM: `/`-prefixed
+/// messages are intercepted as slash commands by Discord/Slack/Telegram etc.
+/// and `@`-prefixed ones become mentions.
+pub const DEFAULT_COMMAND_PREFIX: char = '.';
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -12,6 +18,8 @@ pub struct Config {
     /// Single allowed user. `None` = lockdown mode (start, audit-log, process nothing).
     pub allowed_user: Option<String>,
     pub cwd: PathBuf,
+    /// Command prefix character, defaults to `.`. Should almost never be set.
+    pub command_prefix: char,
 }
 
 impl Config {
@@ -26,10 +34,12 @@ impl Config {
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let command_prefix = parse_command_prefix(std::env::var("PIAC_COMMAND_PREFIX").ok())?;
         Ok(Config {
             discord_token: token,
             allowed_user,
             cwd,
+            command_prefix,
         })
     }
 
@@ -79,8 +89,46 @@ impl Config {
             "PIAC_CWD",
             self.cwd.display()
         );
+        let _ = writeln!(
+            out,
+            "  {:<32} {}  (optional, default: '.')",
+            "PIAC_COMMAND_PREFIX", self.command_prefix
+        );
         out
     }
+}
+
+/// Parse the optional command prefix. Unset/empty = `.`. Must be a single
+/// symbol: `/` (slash-command interception) and `@` (mention) are rejected,
+/// as are alphanumerics and whitespace.
+pub fn parse_command_prefix(raw: Option<String>) -> Result<char, String> {
+    let Some(s) = raw.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) else {
+        return Ok(DEFAULT_COMMAND_PREFIX);
+    };
+    let mut chars = s.chars();
+    let Some(c) = chars.next() else {
+        return Ok(DEFAULT_COMMAND_PREFIX);
+    };
+    if chars.next().is_some() {
+        return Err(format!(
+            "PIAC_COMMAND_PREFIX must be a single character, got: {s}"
+        ));
+    }
+    if c == '/' {
+        return Err(
+            "PIAC_COMMAND_PREFIX cannot be '/': Discord/Slack intercept it as slash commands"
+                .to_string(),
+        );
+    }
+    if c == '@' {
+        return Err(
+            "PIAC_COMMAND_PREFIX cannot be '@': it is a mention on every platform".to_string(),
+        );
+    }
+    if c.is_alphanumeric() || c.is_whitespace() {
+        return Err(format!("PIAC_COMMAND_PREFIX must be a symbol, got: {c}"));
+    }
+    Ok(c)
 }
 
 /// Show only the last 4 characters of a secret; nothing leaks otherwise.
@@ -133,11 +181,29 @@ mod tests {
     }
 
     #[test]
+    fn command_prefix_default_and_validation() {
+        // Unset / empty / whitespace → default `.`.
+        assert_eq!(parse_command_prefix(None), Ok('.'));
+        assert_eq!(parse_command_prefix(Some("  ".to_string())), Ok('.'));
+        // Valid symbol accepted (trimmed).
+        assert_eq!(parse_command_prefix(Some(" ! ".to_string())), Ok('!'));
+        assert_eq!(parse_command_prefix(Some("-".to_string())), Ok('-'));
+        // Rejected: slash, mention, alphanumerics, multi-char.
+        // (Pure whitespace is trimmed away first and falls back to the default.)
+        assert!(parse_command_prefix(Some("/".to_string())).is_err());
+        assert!(parse_command_prefix(Some("@".to_string())).is_err());
+        assert!(parse_command_prefix(Some("a".to_string())).is_err());
+        assert!(parse_command_prefix(Some("1".to_string())).is_err());
+        assert!(parse_command_prefix(Some("--".to_string())).is_err());
+    }
+
+    #[test]
     fn summary_masks_token_and_shows_user() {
         let c = Config {
             discord_token: "super-secret-token".to_string(),
             allowed_user: Some("123456789".to_string()),
             cwd: PathBuf::from("/tmp/pi"),
+            command_prefix: '.',
         };
         let s = c.summary();
         assert!(
@@ -149,12 +215,23 @@ mod tests {
         assert!(s.contains("PIAC_DISCORD_TOKEN"));
         assert!(s.contains("PIAC_DISCORD_ALLOWED_USER_ID"));
         assert!(s.contains("PIAC_CWD"));
+        assert!(s.contains("PIAC_COMMAND_PREFIX"));
+        assert!(s.contains(".  (optional, default: '.')"));
     }
 
     #[test]
     fn load_missing_token_fails() {
         // No PIAC_DISCORD_TOKEN in a clean-ish env: use a scoped removal.
         unsafe { std::env::remove_var("PIAC_DISCORD_TOKEN") };
+        assert!(Config::load().is_err());
+    }
+
+    #[test]
+    fn load_bad_prefix_fails_fast() {
+        unsafe {
+            std::env::set_var("PIAC_DISCORD_TOKEN", "tok");
+            std::env::set_var("PIAC_COMMAND_PREFIX", "//");
+        }
         assert!(Config::load().is_err());
     }
 }
