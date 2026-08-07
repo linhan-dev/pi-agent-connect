@@ -29,7 +29,10 @@ const PROMPT_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 fn init_tracing() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).with_target(true).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .init();
 }
 
 struct Handler {
@@ -72,7 +75,10 @@ impl EventHandler for Handler {
         let classification =
             router::classify(self.config.allowed_user.as_deref(), &bot_id, &incoming);
         match classification {
-            router::Classification { decision: Decision::Drop, audit: Some(reason) } => {
+            router::Classification {
+                decision: Decision::Drop,
+                audit: Some(reason),
+            } => {
                 let preview: String = incoming.content.chars().take(100).collect();
                 tracing::warn!(
                     target: "audit",
@@ -83,14 +89,23 @@ impl EventHandler for Handler {
                     "blocked message"
                 );
             }
-            router::Classification { decision: Decision::Drop, audit: None } => {}
-            router::Classification { decision: Decision::RejectAttachments, .. } => {
+            router::Classification {
+                decision: Decision::Drop,
+                audit: None,
+            } => {}
+            router::Classification {
+                decision: Decision::RejectAttachments,
+                ..
+            } => {
                 let _ = msg
                     .channel_id
                     .say(&ctx.http, format::system(format::attachments_rejected()))
                     .await;
             }
-            router::Classification { decision: Decision::UnknownCommand, .. } => {
+            router::Classification {
+                decision: Decision::UnknownCommand,
+                ..
+            } => {
                 let _ = msg
                     .channel_id
                     .say(&ctx.http, format::system(format::commands_list()))
@@ -119,11 +134,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    tracing::info!(
-        cwd = %config.cwd.display(),
-        mode = if config.allowed_user.is_some() { "normal" } else { "lockdown" },
-        "pi-agent-connect starting"
-    );
+    tracing::info!("{}", config.summary());
 
     let intents = GatewayIntents::DIRECT_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
     let (tx, rx) = mpsc::unbounded_channel::<Job>();
@@ -144,7 +155,9 @@ async fn main() {
             let uid: u64 = match user.parse() {
                 Ok(v) => v,
                 Err(_) => {
-                    eprintln!("PI_AGENT_CONNECT_ALLOWED_USER must be a numeric Discord user id, got: {user}");
+                    eprintln!(
+                        "PI_AGENT_CONNECT_ALLOWED_USER must be a numeric Discord user id, got: {user}"
+                    );
                     std::process::exit(1);
                 }
             };
@@ -163,7 +176,9 @@ async fn main() {
             }
         }
         None => {
-            tracing::warn!("LOCKDOWN MODE: no whitelist configured; messages are logged but not processed");
+            tracing::warn!(
+                "LOCKDOWN MODE: no whitelist configured; messages are logged but not processed"
+            );
         }
     }
 
@@ -180,7 +195,9 @@ async fn main() {
     tokio::spawn(async move {
         shutdown_signal().await;
         tracing::info!("shutdown signal received");
-        let _ = signal_chat.send(format::system(format::shutting_down())).await;
+        let _ = signal_chat
+            .send(format::system(format::shutting_down()))
+            .await;
         signal_agent.abort().await;
         let _ = signal_tx.send(Job::Shutdown);
         let _ = tokio::time::timeout(Duration::from_secs(20), worker_task).await;

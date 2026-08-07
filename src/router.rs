@@ -1,7 +1,7 @@
 //! Message classification (pure logic). Decides what happens to each
 //! incoming Discord message before it touches the worker queue.
 
-use crate::commands::{parse, Command, ParseResult};
+use crate::commands::{Command, ParseResult, parse};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingMessage {
@@ -36,35 +36,55 @@ pub struct Classification {
     pub audit: Option<AuditReason>,
 }
 
-pub fn classify(
-    allowed_user: Option<&str>,
-    bot_id: &str,
-    msg: &IncomingMessage,
-) -> Classification {
+pub fn classify(allowed_user: Option<&str>, bot_id: &str, msg: &IncomingMessage) -> Classification {
     if msg.is_bot {
-        return Classification { decision: Decision::Drop, audit: None };
+        return Classification {
+            decision: Decision::Drop,
+            audit: None,
+        };
     }
     match allowed_user {
-        None => return Classification { decision: Decision::Drop, audit: Some(AuditReason::Lockdown) },
+        None => {
+            return Classification {
+                decision: Decision::Drop,
+                audit: Some(AuditReason::Lockdown),
+            };
+        }
         Some(user) if user != msg.author_id => {
-            return Classification { decision: Decision::Drop, audit: Some(AuditReason::NotWhitelisted) };
+            return Classification {
+                decision: Decision::Drop,
+                audit: Some(AuditReason::NotWhitelisted),
+            };
         }
         Some(_) => {}
     }
     if msg.has_attachments {
-        return Classification { decision: Decision::RejectAttachments, audit: None };
+        return Classification {
+            decision: Decision::RejectAttachments,
+            audit: None,
+        };
     }
     let content = strip_self_mentions(&msg.content, bot_id);
     let trimmed = content.trim();
     if trimmed.is_empty() {
-        return Classification { decision: Decision::Drop, audit: None };
+        return Classification {
+            decision: Decision::Drop,
+            audit: None,
+        };
     }
     match parse(trimmed) {
-        ParseResult::Command(c) => Classification { decision: Decision::Command(c), audit: None },
-        ParseResult::Unknown => Classification { decision: Decision::UnknownCommand, audit: None },
-        ParseResult::NotCommand => {
-            Classification { decision: Decision::Prompt(trimmed.to_string()), audit: None }
-        }
+        ParseResult::Command(c) => Classification {
+            decision: Decision::Command(c),
+            audit: None,
+        },
+        ParseResult::Unknown => Classification {
+            decision: Decision::UnknownCommand,
+            audit: None,
+        },
+        ParseResult::NotCommand => Classification {
+            decision: Decision::Prompt(trimmed.to_string()),
+            audit: None,
+        },
     }
 }
 
@@ -138,7 +158,10 @@ mod tests {
             classify(Some("123"), "9", &msg("123", "/n")).decision,
             Decision::Command(Command::New)
         );
-        assert_eq!(classify(Some("123"), "9", &msg("123", "/wat")).decision, Decision::UnknownCommand);
+        assert_eq!(
+            classify(Some("123"), "9", &msg("123", "/wat")).decision,
+            Decision::UnknownCommand
+        );
     }
 
     #[test]

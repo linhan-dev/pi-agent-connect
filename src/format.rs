@@ -24,7 +24,10 @@ pub fn split_message(text: &str, max: usize) -> Vec<String> {
             .map(|(i, c)| i + c.len_utf8())
             .last()
             .unwrap_or(max);
-        let split_at = rest[..boundary].rfind('\n').map(|i| i + 1).unwrap_or(boundary);
+        let split_at = rest[..boundary]
+            .rfind('\n')
+            .map(|i| i + 1)
+            .unwrap_or(boundary);
         chunks.push(rest[..split_at].to_string());
         rest = rest[split_at..].trim_start_matches('\n');
     }
@@ -123,7 +126,9 @@ pub fn agent_error(e: &AgentError) -> String {
         }
         AgentError::EmptyOutput => "pi finished without output".to_string(),
         AgentError::Rpc { error, .. } => format!("pi rejected: {error}"),
-        AgentError::RpcTimeout { seconds, .. } => format!("pi rejected: timed out after {seconds}s"),
+        AgentError::RpcTimeout { seconds, .. } => {
+            format!("pi rejected: timed out after {seconds}s")
+        }
     }
 }
 
@@ -141,7 +146,9 @@ pub fn session_info(state: &SessionState, stats: Option<&SessionStats>) -> Strin
             s.tokens_input,
             s.tokens_output,
             s.tokens_cache_read,
-            s.cost.map(|c| format!("{c:.4}")).unwrap_or_else(|| "n/a".to_string()),
+            s.cost
+                .map(|c| format!("{c:.4}"))
+                .unwrap_or_else(|| "n/a".to_string()),
         ),
         None => base,
     }
@@ -181,7 +188,10 @@ mod tests {
     fn split_at_newlines() {
         let text = "aaaa\nbbbb\ncccc\ndddd";
         let chunks = split_message(text, 10);
-        assert_eq!(chunks, vec!["aaaa\nbbbb\n".to_string(), "cccc\ndddd".to_string()]);
+        assert_eq!(
+            chunks,
+            vec!["aaaa\nbbbb\n".to_string(), "cccc\ndddd".to_string()]
+        );
     }
 
     #[test]
@@ -198,7 +208,14 @@ mod tests {
         for c in &chunks {
             assert!(c.len() <= 12);
         }
-        assert_eq!(chunks.iter().map(|s| s.as_str()).collect::<Vec<_>>().concat(), text);
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .concat(),
+            text
+        );
     }
 
     #[test]
@@ -213,7 +230,10 @@ mod tests {
             "pi finished without output"
         );
         assert_eq!(
-            agent_error(&AgentError::NonZeroExit { code: Some(1), stderr: "boom".into() }),
+            agent_error(&AgentError::NonZeroExit {
+                code: Some(1),
+                stderr: "boom".into()
+            }),
             "pi exited with code 1: boom"
         );
         assert_eq!(
@@ -221,7 +241,10 @@ mod tests {
             "failed to start pi: nope"
         );
         assert_eq!(
-            agent_error(&AgentError::Rpc { command: "set_model".into(), error: "unknown model".into() }),
+            agent_error(&AgentError::Rpc {
+                command: "set_model".into(),
+                error: "unknown model".into()
+            }),
             "pi rejected: unknown model"
         );
     }
@@ -229,7 +252,10 @@ mod tests {
     #[test]
     fn non_zero_exit_stderr_truncated() {
         let long = "x".repeat(400);
-        let msg = agent_error(&AgentError::NonZeroExit { code: Some(2), stderr: long });
+        let msg = agent_error(&AgentError::NonZeroExit {
+            code: Some(2),
+            stderr: long,
+        });
         assert!(msg.len() < 350);
         assert!(msg.starts_with("pi exited with code 2: "));
     }
@@ -255,7 +281,10 @@ mod tests {
             cost: Some(0.1234),
         };
         let s2 = session_info(&state, Some(&stats));
-        assert!(s2.contains("tokens: in=10 out=20 cache=30 cost=0.1234"), "{s2}");
+        assert!(
+            s2.contains("tokens: in=10 out=20 cache=30 cost=0.1234"),
+            "{s2}"
+        );
     }
 
     #[test]
@@ -275,10 +304,19 @@ mod tests {
     fn command_texts() {
         assert_eq!(new_ack(), "ok, next message will start a new session");
         assert_eq!(abort_ack(true, 0), "aborted running task");
-        assert_eq!(abort_ack(false, 2), "nothing was running; cleared 2 queued messages");
-        assert_eq!(abort_ack(false, 1), "nothing was running; cleared 1 queued message");
+        assert_eq!(
+            abort_ack(false, 2),
+            "nothing was running; cleared 2 queued messages"
+        );
+        assert_eq!(
+            abort_ack(false, 1),
+            "nothing was running; cleared 1 queued message"
+        );
         assert_eq!(cleared_msg(1), "cleared 1 queued message");
         assert_eq!(queued(3), "queued (backlog: 3)");
-        assert_eq!(commands_list(), "commands: /new /abort /session /model /thinking");
+        assert_eq!(
+            commands_list(),
+            "commands: /new /abort /session /model /thinking"
+        );
     }
 }

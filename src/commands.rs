@@ -54,7 +54,10 @@ mod tests {
         assert_eq!(parse("/abort"), ParseResult::Command(Command::Abort));
         assert_eq!(parse("/session"), ParseResult::Command(Command::Session));
         assert_eq!(parse("/model"), ParseResult::Command(Command::Model(None)));
-        assert_eq!(parse("/thinking"), ParseResult::Command(Command::Thinking(None)));
+        assert_eq!(
+            parse("/thinking"),
+            ParseResult::Command(Command::Thinking(None))
+        );
     }
 
     #[test]
@@ -72,14 +75,23 @@ mod tests {
             parse("/model deepseek/deepseek-v4-flash"),
             ParseResult::Command(Command::Model(Some("deepseek/deepseek-v4-flash".into())))
         );
-        assert_eq!(parse("/model   "), ParseResult::Command(Command::Model(None)));
-        assert_eq!(parse("/thinking high"), ParseResult::Command(Command::Thinking(Some("high".into()))));
+        assert_eq!(
+            parse("/model   "),
+            ParseResult::Command(Command::Model(None))
+        );
+        assert_eq!(
+            parse("/thinking high"),
+            ParseResult::Command(Command::Thinking(Some("high".into())))
+        );
     }
 
     #[test]
     fn case_insensitive() {
         assert_eq!(parse("/NEW"), ParseResult::Command(Command::New));
-        assert_eq!(parse("/Model gpt/x"), ParseResult::Command(Command::Model(Some("gpt/x".into()))));
+        assert_eq!(
+            parse("/Model gpt/x"),
+            ParseResult::Command(Command::Model(Some("gpt/x".into())))
+        );
     }
 
     #[test]

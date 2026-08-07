@@ -26,6 +26,10 @@ session management.
 Model and thinking level are NOT configurable here: pi reads its own
 `~/.pi/agent/settings.json`.
 
+On startup the binary logs a readable, multi-line summary of the loaded
+configuration (token masked to its last 4 characters), so you can confirm in
+the logs whether the environment variables actually reached the process.
+
 ## Run
 
 ```bash

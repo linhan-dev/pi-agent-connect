@@ -41,12 +41,21 @@ struct Running {
 }
 
 enum TaskOutcome {
-    Prompt { fresh: bool, result: Result<String, AgentError> },
+    Prompt {
+        fresh: bool,
+        result: Result<String, AgentError>,
+    },
     PromptTimedOut,
     Session(Result<(SessionState, Option<SessionStats>), AgentError>),
-    Model { model_ref: String, result: Result<(), AgentError> },
+    Model {
+        model_ref: String,
+        result: Result<(), AgentError>,
+    },
     Models(Result<Vec<String>, AgentError>),
-    Thinking { level: String, result: Result<(), AgentError> },
+    Thinking {
+        level: String,
+        result: Result<(), AgentError>,
+    },
     ThinkingLevels(Result<Vec<String>, AgentError>),
 }
 
@@ -60,7 +69,12 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
         prompt_timeout: Duration,
         rx: mpsc::UnboundedReceiver<Job>,
     ) -> Self {
-        Worker { agent, chat, prompt_timeout, rx }
+        Worker {
+            agent,
+            chat,
+            prompt_timeout,
+            rx,
+        }
     }
 
     pub async fn run(mut self) {
@@ -169,7 +183,8 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                     if let Some(r) = current.take() {
                         let _ = r.task.await;
                     }
-                    self.handle_outcome(task_outcome, &mut known_session_id).await;
+                    self.handle_outcome(task_outcome, &mut known_session_id)
+                        .await;
                 }
                 Some(Err(_)) => {
                     let _ = current.take();
@@ -209,9 +224,16 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                     }
                 })
             };
-            let outcome = match tokio::time::timeout(timeout, agent.run_prompt(prompt, fresh)).await {
-                Ok(Ok(text)) => TaskOutcome::Prompt { fresh, result: Ok(text) },
-                Ok(Err(e)) => TaskOutcome::Prompt { fresh, result: Err(e) },
+            let outcome = match tokio::time::timeout(timeout, agent.run_prompt(prompt, fresh)).await
+            {
+                Ok(Ok(text)) => TaskOutcome::Prompt {
+                    fresh,
+                    result: Ok(text),
+                },
+                Ok(Err(e)) => TaskOutcome::Prompt {
+                    fresh,
+                    result: Err(e),
+                },
                 Err(_) => {
                     agent.abort().await;
                     TaskOutcome::PromptTimedOut
@@ -273,7 +295,10 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
 
     async fn handle_outcome(&self, outcome: TaskOutcome, known_session_id: &mut Option<String>) {
         match outcome {
-            TaskOutcome::Prompt { fresh, result: Ok(text) } => {
+            TaskOutcome::Prompt {
+                fresh,
+                result: Ok(text),
+            } => {
                 if let Err(e) = self.chat.send(text).await {
                     tracing::error!(error = %e.0, "failed to send response");
                 }
@@ -293,46 +318,87 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                 }
             }
             TaskOutcome::Prompt { result: Err(e), .. } => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
             TaskOutcome::PromptTimedOut => {
                 let _ = self
                     .chat
-                    .send(format::system(&format::prompt_timed_out(self.prompt_timeout.as_secs())))
+                    .send(format::system(&format::prompt_timed_out(
+                        self.prompt_timeout.as_secs(),
+                    )))
                     .await;
             }
             TaskOutcome::Session(Ok((state, stats))) => {
                 let _ = self
                     .chat
-                    .send(format::system(&format::session_info(&state, stats.as_ref())))
+                    .send(format::system(&format::session_info(
+                        &state,
+                        stats.as_ref(),
+                    )))
                     .await;
             }
             TaskOutcome::Session(Err(e)) => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
-            TaskOutcome::Model { model_ref, result: Ok(()) } => {
-                let _ = self.chat.send(format::system(&format::model_set(&model_ref))).await;
+            TaskOutcome::Model {
+                model_ref,
+                result: Ok(()),
+            } => {
+                let _ = self
+                    .chat
+                    .send(format::system(&format::model_set(&model_ref)))
+                    .await;
             }
             TaskOutcome::Model { result: Err(e), .. } => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
             TaskOutcome::Models(Ok(models)) => {
-                let _ = self.chat.send(format::system(&format::models_list(&models))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::models_list(&models)))
+                    .await;
             }
             TaskOutcome::Models(Err(e)) => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
-            TaskOutcome::Thinking { level, result: Ok(()) } => {
-                let _ = self.chat.send(format::system(&format::thinking_set(&level))).await;
+            TaskOutcome::Thinking {
+                level,
+                result: Ok(()),
+            } => {
+                let _ = self
+                    .chat
+                    .send(format::system(&format::thinking_set(&level)))
+                    .await;
             }
             TaskOutcome::Thinking { result: Err(e), .. } => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
             TaskOutcome::ThinkingLevels(Ok(levels)) => {
-                let _ = self.chat.send(format::system(&format::levels_list(&levels))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::levels_list(&levels)))
+                    .await;
             }
             TaskOutcome::ThinkingLevels(Err(e)) => {
-                let _ = self.chat.send(format::system(&format::agent_error(&e))).await;
+                let _ = self
+                    .chat
+                    .send(format::system(&format::agent_error(&e)))
+                    .await;
             }
         }
     }
@@ -341,11 +407,11 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::chat::ChatError;
+    use async_trait::async_trait;
     use std::collections::VecDeque;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex as StdMutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::watch;
 
     // ── Fakes ──────────────────────────────────────────────────────────
@@ -393,7 +459,10 @@ mod tests {
         }
 
         fn reply(&self, text: &str) {
-            self.behaviors.lock().unwrap().push_back(Behavior::Ok(text.to_string()));
+            self.behaviors
+                .lock()
+                .unwrap()
+                .push_back(Behavior::Ok(text.to_string()));
         }
 
         fn fail(&self, e: AgentError) {
@@ -412,7 +481,10 @@ mod tests {
     #[async_trait]
     impl Agent for FakeAgent {
         async fn run_prompt(&self, prompt: String, fresh: bool) -> Result<String, AgentError> {
-            self.calls.lock().unwrap().push(format!("prompt(fresh={fresh}):{prompt}"));
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("prompt(fresh={fresh}):{prompt}"));
             let behavior = self.behaviors.lock().unwrap().pop_front();
             match behavior {
                 Some(Behavior::Ok(t)) => Ok(t),
@@ -427,7 +499,10 @@ mod tests {
                             break;
                         }
                     }
-                    Err(AgentError::NonZeroExit { code: None, stderr: "killed".into() })
+                    Err(AgentError::NonZeroExit {
+                        code: None,
+                        stderr: "killed".into(),
+                    })
                 }
                 None => Ok("default reply".into()),
             }
@@ -449,7 +524,10 @@ mod tests {
         }
 
         async fn set_model(&self, model_ref: &str) -> Result<(), AgentError> {
-            self.calls.lock().unwrap().push(format!("set_model:{model_ref}"));
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("set_model:{model_ref}"));
             Ok(())
         }
 
@@ -459,12 +537,18 @@ mod tests {
         }
 
         async fn set_thinking(&self, level: &str) -> Result<(), AgentError> {
-            self.calls.lock().unwrap().push(format!("set_thinking:{level}"));
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("set_thinking:{level}"));
             Ok(())
         }
 
         async fn list_thinking_levels(&self) -> Result<Vec<String>, AgentError> {
-            self.calls.lock().unwrap().push("list_thinking_levels".into());
+            self.calls
+                .lock()
+                .unwrap()
+                .push("list_thinking_levels".into());
             Ok(self.levels.lock().unwrap().clone())
         }
     }
@@ -477,7 +561,10 @@ mod tests {
 
     impl FakeChat {
         fn new() -> Self {
-            FakeChat { sent: Arc::new(StdMutex::new(Vec::new())), typing: Arc::new(AtomicUsize::new(0)) }
+            FakeChat {
+                sent: Arc::new(StdMutex::new(Vec::new())),
+                typing: Arc::new(AtomicUsize::new(0)),
+            }
         }
 
         fn messages(&self) -> Vec<String> {
@@ -528,7 +615,9 @@ mod tests {
         assert!(messages.iter().any(|m| m == "pi answer"), "{messages:?}");
         // First message since startup: background session info is posted.
         assert!(
-            messages.iter().any(|m| m.starts_with("[pi-agent-connect] new session: id=sess-1")),
+            messages
+                .iter()
+                .any(|m| m.starts_with("[pi-agent-connect] new session: id=sess-1")),
             "{messages:?}"
         );
         assert_eq!(calls[0], "prompt(fresh=false):hello");
@@ -553,7 +642,11 @@ mod tests {
         )
         .await;
         assert_eq!(
-            calls.iter().filter(|c| c.starts_with("prompt")).cloned().collect::<Vec<_>>(),
+            calls
+                .iter()
+                .filter(|c| c.starts_with("prompt"))
+                .cloned()
+                .collect::<Vec<_>>(),
             vec![
                 "prompt(fresh=false):a".to_string(),
                 "prompt(fresh=false):b".to_string(),
@@ -574,10 +667,18 @@ mod tests {
             vec![Job::New, Job::Prompt("a".into()), Job::Prompt("b".into())],
         )
         .await;
-        let prompts: Vec<_> = calls.iter().filter(|c| c.starts_with("prompt")).cloned().collect();
+        let prompts: Vec<_> = calls
+            .iter()
+            .filter(|c| c.starts_with("prompt"))
+            .cloned()
+            .collect();
         assert_eq!(prompts[0], "prompt(fresh=true):a");
         assert_eq!(prompts[1], "prompt(fresh=false):b");
-        assert!(messages.contains(&"[pi-agent-connect] ok, next message will start a new session".to_string()));
+        assert!(
+            messages.contains(
+                &"[pi-agent-connect] ok, next message will start a new session".to_string()
+            )
+        );
     }
 
     #[tokio::test]
@@ -597,10 +698,23 @@ mod tests {
         )
         .await;
 
-        let prompts: Vec<_> = calls.iter().filter(|c| c.starts_with("prompt")).cloned().collect();
-        assert_eq!(prompts, vec!["prompt(fresh=false):a".to_string(), "prompt(fresh=true):c".to_string()]);
+        let prompts: Vec<_> = calls
+            .iter()
+            .filter(|c| c.starts_with("prompt"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            prompts,
+            vec![
+                "prompt(fresh=false):a".to_string(),
+                "prompt(fresh=true):c".to_string()
+            ]
+        );
         assert!(calls.contains(&"abort".to_string()), "{calls:?}");
-        assert!(messages.contains(&"[pi-agent-connect] queued (backlog: 1)".to_string()), "{messages:?}");
+        assert!(
+            messages.contains(&"[pi-agent-connect] queued (backlog: 1)".to_string()),
+            "{messages:?}"
+        );
         assert!(
             messages.contains(
                 &"[pi-agent-connect] ok, next message will start a new session; aborted running task, cleared 1 queued message"
@@ -615,12 +729,17 @@ mod tests {
         let agent = FakeAgent::new();
         agent.hang();
         let chat = FakeChat::new();
-        let (calls, messages) =
-            drive(agent, chat, vec![Job::Prompt("a".into()), Job::Abort]).await;
+        let (calls, messages) = drive(agent, chat, vec![Job::Prompt("a".into()), Job::Abort]).await;
         assert!(calls.contains(&"abort".to_string()), "{calls:?}");
-        assert!(messages.contains(&"[pi-agent-connect] aborted running task".to_string()), "{messages:?}");
+        assert!(
+            messages.contains(&"[pi-agent-connect] aborted running task".to_string()),
+            "{messages:?}"
+        );
         // The aborted task's error must be suppressed.
-        assert!(!messages.iter().any(|m| m.contains("pi exited with code")), "{messages:?}");
+        assert!(
+            !messages.iter().any(|m| m.contains("pi exited with code")),
+            "{messages:?}"
+        );
     }
 
     #[tokio::test]
@@ -634,7 +753,10 @@ mod tests {
     #[tokio::test]
     async fn pi_error_is_mapped() {
         let agent = FakeAgent::new();
-        agent.fail(AgentError::NonZeroExit { code: Some(1), stderr: "boom".into() });
+        agent.fail(AgentError::NonZeroExit {
+            code: Some(1),
+            stderr: "boom".into(),
+        });
         let chat = FakeChat::new();
         let (_, messages) = drive(agent, chat, vec![Job::Prompt("x".into())]).await;
         assert!(
@@ -659,7 +781,8 @@ mod tests {
         );
         worker.run().await;
         assert!(
-            chat.messages().contains(&"[pi-agent-connect] pi timed out after 1s, aborted".to_string()),
+            chat.messages()
+                .contains(&"[pi-agent-connect] pi timed out after 1s, aborted".to_string()),
             "{:?}",
             chat.messages()
         );
@@ -674,7 +797,10 @@ mod tests {
         assert!(calls.contains(&"get_state".to_string()));
         assert!(calls.contains(&"get_session_stats".to_string()));
         assert!(
-            messages.iter().any(|m| m.starts_with("[pi-agent-connect] session: id=sess-1") && m.contains("tokens: in=10 out=20")),
+            messages
+                .iter()
+                .any(|m| m.starts_with("[pi-agent-connect] session: id=sess-1")
+                    && m.contains("tokens: in=10 out=20")),
             "{messages:?}"
         );
     }
@@ -699,7 +825,11 @@ mod tests {
         assert!(calls.contains(&"set_thinking:high".to_string()));
         assert!(calls.contains(&"list_thinking_levels".to_string()));
         assert!(messages.contains(&"[pi-agent-connect] model set to deepseek/x".to_string()));
-        assert!(messages.contains(&"[pi-agent-connect] available models: deepseek/a, qiuming/b".to_string()));
+        assert!(
+            messages.contains(
+                &"[pi-agent-connect] available models: deepseek/a, qiuming/b".to_string()
+            )
+        );
         assert!(messages.contains(&"[pi-agent-connect] thinking level set to high".to_string()));
         assert!(messages.contains(&"[pi-agent-connect] available levels: off, high".to_string()));
     }
@@ -709,8 +839,7 @@ mod tests {
         let agent = FakeAgent::new();
         agent.hang();
         let chat = FakeChat::new();
-        let (calls, _) =
-            drive(agent, chat, vec![Job::Prompt("a".into()), Job::Shutdown]).await;
+        let (calls, _) = drive(agent, chat, vec![Job::Prompt("a".into()), Job::Shutdown]).await;
         assert!(calls.contains(&"abort".to_string()));
     }
 }

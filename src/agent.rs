@@ -9,7 +9,7 @@
 //! so it can be unit-tested against canned pi output.
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -102,8 +102,10 @@ impl RealAgent {
     /// early makes pi shut down before slow commands (e.g. `get_available_models`)
     /// finish.
     async fn rpc(&self, command: Value, expected: &str) -> Result<Value, AgentError> {
-        let line = serde_json::to_string(&command)
-            .map_err(|e| AgentError::Rpc { command: expected.into(), error: e.to_string() })?;
+        let line = serde_json::to_string(&command).map_err(|e| AgentError::Rpc {
+            command: expected.into(),
+            error: e.to_string(),
+        })?;
         let mut child = Command::new(&self.pi_bin)
             .args(["--mode", "rpc", "--continue"])
             .current_dir(&self.cwd)
@@ -119,7 +121,10 @@ impl RealAgent {
         stdin
             .write_all(format!("{line}\n").as_bytes())
             .await
-            .map_err(|e| AgentError::Rpc { command: expected.into(), error: e.to_string() })?;
+            .map_err(|e| AgentError::Rpc {
+                command: expected.into(),
+                error: e.to_string(),
+            })?;
 
         // Stream stdout until the matching response line arrives (or timeout).
         let stdout = child.stdout.take().expect("pi rpc stdout");
@@ -132,7 +137,10 @@ impl RealAgent {
                 let n = reader
                     .read_line(&mut buf)
                     .await
-                    .map_err(|e| AgentError::Rpc { command: expected.into(), error: e.to_string() })?;
+                    .map_err(|e| AgentError::Rpc {
+                        command: expected.into(),
+                        error: e.to_string(),
+                    })?;
                 if n == 0 {
                     break; // EOF without a response
                 }
@@ -161,7 +169,10 @@ impl RealAgent {
                 if let Some(pid) = pid {
                     self.clear_pid(pid).await;
                 }
-                return Err(AgentError::RpcTimeout { command: expected.into(), seconds: self.rpc_timeout.as_secs() });
+                return Err(AgentError::RpcTimeout {
+                    command: expected.into(),
+                    seconds: self.rpc_timeout.as_secs(),
+                });
             }
         }
 
@@ -188,7 +199,10 @@ impl RealAgent {
                 .and_then(|e| e.as_str())
                 .unwrap_or("unknown error")
                 .to_string();
-            return Err(AgentError::Rpc { command: expected.into(), error: err });
+            return Err(AgentError::Rpc {
+                command: expected.into(),
+                error: err,
+            });
         }
         Ok(value.get("data").cloned().unwrap_or(Value::Null))
     }
@@ -226,7 +240,10 @@ impl Agent for RealAgent {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            return Err(AgentError::NonZeroExit { code: output.status.code(), stderr });
+            return Err(AgentError::NonZeroExit {
+                code: output.status.code(),
+                stderr,
+            });
         }
         if stdout.is_empty() {
             return Err(AgentError::EmptyOutput);
@@ -254,7 +271,9 @@ impl Agent for RealAgent {
     }
 
     async fn get_session_stats(&self) -> Result<SessionStats, AgentError> {
-        let data = self.rpc(json!({"type": "get_session_stats"}), "get_session_stats").await?;
+        let data = self
+            .rpc(json!({"type": "get_session_stats"}), "get_session_stats")
+            .await?;
         Ok(parse_session_stats(&data))
     }
 
@@ -269,20 +288,31 @@ impl Agent for RealAgent {
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AgentError> {
-        let data = self.rpc(json!({"type": "get_available_models"}), "get_available_models").await?;
+        let data = self
+            .rpc(
+                json!({"type": "get_available_models"}),
+                "get_available_models",
+            )
+            .await?;
         Ok(parse_model_list(&data))
     }
 
     async fn set_thinking(&self, level: &str) -> Result<(), AgentError> {
-        self.rpc(json!({"type": "set_thinking_level", "level": level}), "set_thinking_level")
-            .await?;
+        self.rpc(
+            json!({"type": "set_thinking_level", "level": level}),
+            "set_thinking_level",
+        )
+        .await?;
         Ok(())
     }
 
     async fn list_thinking_levels(&self) -> Result<Vec<String>, AgentError> {
-        let data =
-            self.rpc(json!({"type": "get_available_thinking_levels"}), "get_available_thinking_levels")
-                .await?;
+        let data = self
+            .rpc(
+                json!({"type": "get_available_thinking_levels"}),
+                "get_available_thinking_levels",
+            )
+            .await?;
         Ok(parse_level_list(&data))
     }
 }
@@ -307,26 +337,42 @@ pub fn find_response_line<'a>(output: &'a str, command: &str) -> Option<&'a str>
 
 pub fn parse_session_state(v: &Value) -> SessionState {
     SessionState {
-        session_id: v.get("sessionId").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-        session_file: v.get("sessionFile").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
+        session_id: v
+            .get("sessionId")
+            .and_then(|x| x.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        session_file: v
+            .get("sessionFile")
+            .and_then(|x| x.as_str())
+            .unwrap_or_default()
+            .to_string(),
         model: v
             .get("model")
             .and_then(|m| m.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
-                v.get("model").and_then(|m| m.get("provider")).and_then(|p| p.as_str()).map(|p| {
-                    let id = v.get("model").and_then(|m| m.get("id")).and_then(|i| i.as_str()).unwrap_or("");
-                    format!("{p}/{id}")
-                })
+                v.get("model")
+                    .and_then(|m| m.get("provider"))
+                    .and_then(|p| p.as_str())
+                    .map(|p| {
+                        let id = v
+                            .get("model")
+                            .and_then(|m| m.get("id"))
+                            .and_then(|i| i.as_str())
+                            .unwrap_or("");
+                        format!("{p}/{id}")
+                    })
             }),
-        thinking: v.get("thinkingLevel").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        thinking: v
+            .get("thinkingLevel")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
     }
 }
 
 pub fn parse_session_stats(v: &Value) -> SessionStats {
-    let num = |path: &str| -> u64 {
-        v.pointer(path).and_then(|x| x.as_u64()).unwrap_or(0)
-    };
+    let num = |path: &str| -> u64 { v.pointer(path).and_then(|x| x.as_u64()).unwrap_or(0) };
     SessionStats {
         tokens_input: num("/tokens/input"),
         tokens_output: num("/tokens/output"),
@@ -380,7 +426,9 @@ fn kill_pid(pid: u32, force: bool) {
     #[cfg(unix)]
     {
         let sig = if force { "KILL" } else { "TERM" };
-        let _ = std::process::Command::new("kill").args([format!("-{sig}"), pid.to_string()]).spawn();
+        let _ = std::process::Command::new("kill")
+            .args([format!("-{sig}"), pid.to_string()])
+            .spawn();
     }
     #[cfg(windows)]
     {
@@ -409,7 +457,8 @@ trailing junk
 
     #[test]
     fn find_response_matches_command() {
-        let output = "{\"type\":\"response\",\"command\":\"set_model\",\"success\":true,\"data\":{}}";
+        let output =
+            "{\"type\":\"response\",\"command\":\"set_model\",\"success\":true,\"data\":{}}";
         assert!(find_response_line(output, "set_model").is_some());
         assert!(find_response_line(output, "get_state").is_none());
     }
@@ -446,7 +495,10 @@ trailing junk
             "contextUsage": {"tokens": 60, "contextWindow": 200, "percent": 30}
         });
         let s = parse_session_stats(&v);
-        assert_eq!((s.tokens_input, s.tokens_output, s.tokens_cache_read), (1, 2, 3));
+        assert_eq!(
+            (s.tokens_input, s.tokens_output, s.tokens_cache_read),
+            (1, 2, 3)
+        );
         assert_eq!(s.cost, Some(0.5));
     }
 
@@ -457,7 +509,10 @@ trailing junk
             {"provider": "qiuming", "id": "gpt-5.6-sol"},
             {"provider": "x", "id": "y", "name": "Y"}
         ]});
-        assert_eq!(parse_model_list(&models), vec!["deepseek/deepseek-v4-flash", "qiuming/gpt-5.6-sol", "x/y"]);
+        assert_eq!(
+            parse_model_list(&models),
+            vec!["deepseek/deepseek-v4-flash", "qiuming/gpt-5.6-sol", "x/y"]
+        );
 
         let levels = json!({"levels": ["off", "low", "high"]});
         assert_eq!(parse_level_list(&levels), vec!["off", "low", "high"]);
@@ -483,16 +538,25 @@ trailing junk
         let state = agent.get_state().await.expect("get_state");
         assert!(!state.session_id.is_empty(), "session id empty");
         assert!(!state.session_file.is_empty(), "session file empty");
-        println!("get_state -> id={} model={:?} thinking={:?}", state.session_id, state.model, state.thinking);
+        println!(
+            "get_state -> id={} model={:?} thinking={:?}",
+            state.session_id, state.model, state.thinking
+        );
 
         let stats = agent.get_session_stats().await.expect("get_session_stats");
-        println!("stats -> in={} out={} cost={:?}", stats.tokens_input, stats.tokens_output, stats.cost);
+        println!(
+            "stats -> in={} out={} cost={:?}",
+            stats.tokens_input, stats.tokens_output, stats.cost
+        );
 
         let models = agent.list_models().await.expect("get_available_models");
         assert!(!models.is_empty(), "model list empty");
         println!("models -> {models:?}");
 
-        let levels = agent.list_thinking_levels().await.expect("get_available_thinking_levels");
+        let levels = agent
+            .list_thinking_levels()
+            .await
+            .expect("get_available_thinking_levels");
         assert!(!levels.is_empty(), "levels empty");
         println!("levels -> {levels:?}");
 

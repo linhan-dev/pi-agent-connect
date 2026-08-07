@@ -24,7 +24,10 @@ pub struct DiscordChat {
 
 impl DiscordChat {
     pub fn new(http: Arc<Http>) -> Self {
-        DiscordChat { http, channel_id: None }
+        DiscordChat {
+            http,
+            channel_id: None,
+        }
     }
 
     pub fn set_channel(&mut self, id: ChannelId) {
