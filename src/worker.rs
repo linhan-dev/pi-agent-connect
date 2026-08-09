@@ -9,7 +9,7 @@
 //! so they are unit-testable with fake agent/chat implementations.
 
 use crate::agent::{Agent, AgentError, SessionState, SessionStats};
-use crate::chat::Chat;
+use crate::chat::{next_backoff, Chat, ChatErrorKind, RETRY_BACKOFF_INITIAL};
 use crate::format;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -132,7 +132,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                             if !extra.is_empty() {
                                 ack = format!("{ack}; {}", extra.join(", "));
                             }
-                            let _ = self.chat.send(format::system(&ack)).await;
+                            self.send_reliable(format::system(&ack), "new ack").await;
                             continue;
                         }
                         Job::Abort => {
@@ -141,7 +141,7 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                             queue.clear();
                             self.drain_current(&mut current).await;
                             let ack = format::abort_ack(was_running, cleared);
-                            let _ = self.chat.send(format::system(&ack)).await;
+                            self.send_reliable(format::system(&ack), "abort ack").await;
                             continue;
                         }
                         Job::Shutdown => {
@@ -154,10 +154,11 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                                 let is_prompt = matches!(other, Job::Prompt(_));
                                 queue.push_back(other);
                                 if is_prompt {
-                                    let _ = self
-                                        .chat
-                                        .send(format::system(&format::queued(backlog)))
-                                        .await;
+                                    self.send_reliable(
+                                        format::system(&format::queued(backlog)),
+                                        "queued notice",
+                                    )
+                                    .await;
                                 }
                             } else {
                                 queue.push_back(other);
@@ -188,12 +189,62 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                 }
                 Some(Err(_)) => {
                     let _ = current.take();
-                    let _ = self
-                        .chat
-                        .send(format::system(&format::internal_error("agent task failed")))
-                        .await;
+                    self.send_reliable(
+                        format::system(&format::internal_error("agent task failed")),
+                        "internal error notice",
+                    )
+                    .await;
                 }
                 None => {}
+            }
+        }
+    }
+
+    /// Send a message, retrying transient failures with backoff until success.
+    ///
+    /// Fail-closed semantics: a bot that cannot deliver a reply must not keep
+    /// executing blindly (the owner cannot see results and cannot abort). On a
+    /// transient failure (network, 429, 5xx) this retries with exponential
+    /// backoff while queued jobs accumulate; on a permanent failure (4xx other
+    /// than 429, missing channel) the process is terminated with a clear log.
+    ///
+    /// Retry granularity is the whole message: if a multi-chunk message (>
+    /// 2000 chars, split by `Chat::send`) fails mid-send, the already-delivered
+    /// chunks are re-sent on the next attempt. Accepted: duplicates only occur
+    /// during a transient outage on an unusually long message, and delivery
+    /// matters more than dedup.
+    async fn send_reliable(&self, text: String, what: &str) {
+        let mut delay = RETRY_BACKOFF_INITIAL;
+        let mut attempt: u32 = 0;
+        loop {
+            match self.chat.send(text.clone()).await {
+                Ok(()) => return,
+                Err(e) if e.kind == ChatErrorKind::Transient => {
+                    attempt += 1;
+                    tracing::warn!(
+                        what,
+                        attempt,
+                        error = %e.detail,
+                        ?delay,
+                        "send failed (transient), retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    delay = next_backoff(delay);
+                }
+                Err(e) => {
+                    tracing::error!(
+                        what,
+                        error = %e.detail,
+                        "send failed (permanent), terminating"
+                    );
+                    // `process::exit` skips destructors, so SIGTERM a live pi
+                    // child before exiting rather than leaving it running.
+                    // Note: `abort`'s SIGKILL escalation runs in a spawned
+                    // task that does not survive `process::exit`; this is
+                    // SIGTERM-only, which pi honours in practice.
+                    self.agent.abort().await;
+                    std::process::exit(1);
+                }
             }
         }
     }
@@ -299,17 +350,16 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                 fresh,
                 result: Ok(text),
             } => {
-                if let Err(e) = self.chat.send(text).await {
-                    tracing::error!(error = %e.0, "failed to send response");
-                }
+                self.send_reliable(text, "prompt reply").await;
                 if fresh || known_session_id.is_none() {
                     match self.agent.get_state().await {
                         Ok(state) => {
                             *known_session_id = Some(state.session_id.clone());
-                            let _ = self
-                                .chat
-                                .send(format::system(&format::new_session_info(&state)))
-                                .await;
+                            self.send_reliable(
+                                format::system(&format::new_session_info(&state)),
+                                "session info",
+                            )
+                            .await;
                         }
                         Err(e) => {
                             tracing::warn!(error = ?e, "failed to query session state for new-session info");
@@ -318,86 +368,63 @@ impl<A: Agent + 'static, C: Chat + 'static> Worker<A, C> {
                 }
             }
             TaskOutcome::Prompt { result: Err(e), .. } => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
             TaskOutcome::PromptTimedOut => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::prompt_timed_out(
-                        self.prompt_timeout.as_secs(),
-                    )))
-                    .await;
+                self.send_reliable(
+                    format::system(&format::prompt_timed_out(self.prompt_timeout.as_secs())),
+                    "timeout notice",
+                )
+                .await;
             }
             TaskOutcome::Session(Ok((state, stats))) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::session_info(
-                        &state,
-                        stats.as_ref(),
-                    )))
-                    .await;
+                self.send_reliable(
+                    format::system(&format::session_info(&state, stats.as_ref())),
+                    "session info",
+                )
+                .await;
             }
             TaskOutcome::Session(Err(e)) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
             TaskOutcome::Model {
                 model_ref,
                 result: Ok(()),
             } => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::model_set(&model_ref)))
+                self.send_reliable(format::system(&format::model_set(&model_ref)), "model ack")
                     .await;
             }
             TaskOutcome::Model { result: Err(e), .. } => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
             TaskOutcome::Models(Ok(models)) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::models_list(&models)))
+                self.send_reliable(format::system(&format::models_list(&models)), "models list")
                     .await;
             }
             TaskOutcome::Models(Err(e)) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
             TaskOutcome::Thinking {
                 level,
                 result: Ok(()),
             } => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::thinking_set(&level)))
+                self.send_reliable(format::system(&format::thinking_set(&level)), "thinking ack")
                     .await;
             }
             TaskOutcome::Thinking { result: Err(e), .. } => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
             TaskOutcome::ThinkingLevels(Ok(levels)) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::levels_list(&levels)))
+                self.send_reliable(format::system(&format::levels_list(&levels)), "levels list")
                     .await;
             }
             TaskOutcome::ThinkingLevels(Err(e)) => {
-                let _ = self
-                    .chat
-                    .send(format::system(&format::agent_error(&e)))
+                self.send_reliable(format::system(&format::agent_error(&e)), "error reply")
                     .await;
             }
         }
@@ -426,6 +453,8 @@ mod tests {
     #[derive(Clone)]
     struct FakeAgent {
         calls: Arc<StdMutex<Vec<String>>>,
+        /// Shared event log (with FakeChat) for cross-component ordering assertions.
+        events: Arc<StdMutex<Vec<String>>>,
         behaviors: Arc<StdMutex<VecDeque<Behavior>>>,
         abort_tx: Arc<watch::Sender<bool>>,
         state: Arc<StdMutex<SessionState>>,
@@ -436,9 +465,14 @@ mod tests {
 
     impl FakeAgent {
         fn new() -> Self {
+            Self::with_events(Arc::new(StdMutex::new(Vec::new())))
+        }
+
+        fn with_events(events: Arc<StdMutex<Vec<String>>>) -> Self {
             let (abort_tx, _) = watch::channel(false);
             FakeAgent {
                 calls: Arc::new(StdMutex::new(Vec::new())),
+                events,
                 behaviors: Arc::new(StdMutex::new(VecDeque::new())),
                 abort_tx: Arc::new(abort_tx),
                 state: Arc::new(StdMutex::new(SessionState {
@@ -456,6 +490,11 @@ mod tests {
                 models: Arc::new(StdMutex::new(vec!["deepseek/a".into(), "qiuming/b".into()])),
                 levels: Arc::new(StdMutex::new(vec!["off".into(), "high".into()])),
             }
+        }
+
+        fn note(&self, s: &str) {
+            self.calls.lock().unwrap().push(s.to_string());
+            self.events.lock().unwrap().push(s.to_string());
         }
 
         fn reply(&self, text: &str) {
@@ -481,10 +520,7 @@ mod tests {
     #[async_trait]
     impl Agent for FakeAgent {
         async fn run_prompt(&self, prompt: String, fresh: bool) -> Result<String, AgentError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("prompt(fresh={fresh}):{prompt}"));
+            self.note(&format!("prompt(fresh={fresh}):{prompt}"));
             let behavior = self.behaviors.lock().unwrap().pop_front();
             match behavior {
                 Some(Behavior::Ok(t)) => Ok(t),
@@ -509,46 +545,37 @@ mod tests {
         }
 
         async fn abort(&self) {
-            self.calls.lock().unwrap().push("abort".into());
+            self.note("abort");
             let _ = self.abort_tx.send(true);
         }
 
         async fn get_state(&self) -> Result<SessionState, AgentError> {
-            self.calls.lock().unwrap().push("get_state".into());
+            self.note("get_state");
             Ok(self.state.lock().unwrap().clone())
         }
 
         async fn get_session_stats(&self) -> Result<SessionStats, AgentError> {
-            self.calls.lock().unwrap().push("get_session_stats".into());
+            self.note("get_session_stats");
             Ok(self.stats.lock().unwrap().clone())
         }
 
         async fn set_model(&self, model_ref: &str) -> Result<(), AgentError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("set_model:{model_ref}"));
+            self.note(&format!("set_model:{model_ref}"));
             Ok(())
         }
 
         async fn list_models(&self) -> Result<Vec<String>, AgentError> {
-            self.calls.lock().unwrap().push("list_models".into());
+            self.note("list_models");
             Ok(self.models.lock().unwrap().clone())
         }
 
         async fn set_thinking(&self, level: &str) -> Result<(), AgentError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("set_thinking:{level}"));
+            self.note(&format!("set_thinking:{level}"));
             Ok(())
         }
 
         async fn list_thinking_levels(&self) -> Result<Vec<String>, AgentError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push("list_thinking_levels".into());
+            self.note("list_thinking_levels");
             Ok(self.levels.lock().unwrap().clone())
         }
     }
@@ -556,15 +583,33 @@ mod tests {
     #[derive(Clone)]
     struct FakeChat {
         sent: Arc<StdMutex<Vec<String>>>,
+        /// Shared event log (with FakeAgent) for cross-component ordering assertions.
+        events: Arc<StdMutex<Vec<String>>>,
         typing: Arc<AtomicUsize>,
+        /// Pending transient failures keyed by exact send text (consumed in order).
+        fail_on: Arc<StdMutex<VecDeque<(String, usize)>>>,
     }
 
     impl FakeChat {
         fn new() -> Self {
+            Self::with_events(Arc::new(StdMutex::new(Vec::new())))
+        }
+
+        fn with_events(events: Arc<StdMutex<Vec<String>>>) -> Self {
             FakeChat {
                 sent: Arc::new(StdMutex::new(Vec::new())),
+                events,
                 typing: Arc::new(AtomicUsize::new(0)),
+                fail_on: Arc::new(StdMutex::new(VecDeque::new())),
             }
+        }
+
+        /// Make the next `count` sends of exactly `text` fail transiently.
+        fn fail_sends_transiently_for(&self, text: &str, count: usize) {
+            self.fail_on
+                .lock()
+                .unwrap()
+                .push_back((text.to_string(), count));
         }
 
         fn messages(&self) -> Vec<String> {
@@ -575,8 +620,27 @@ mod tests {
     #[async_trait]
     impl Chat for FakeChat {
         async fn send(&self, text: String) -> Result<(), ChatError> {
-            self.sent.lock().unwrap().push(text);
-            Ok(())
+            let fail = {
+                let mut q = self.fail_on.lock().unwrap();
+                match q.iter_mut().find(|(t, _)| *t == text) {
+                    Some((_, n)) if *n > 0 => {
+                        *n -= 1;
+                        true
+                    }
+                    _ => false,
+                }
+            };
+            if fail {
+                self.events.lock().unwrap().push(format!("send-fail:{text}"));
+                Err(ChatError {
+                    kind: ChatErrorKind::Transient,
+                    detail: "network blip".into(),
+                })
+            } else {
+                self.sent.lock().unwrap().push(text.clone());
+                self.events.lock().unwrap().push(format!("send-ok:{text}"));
+                Ok(())
+            }
         }
 
         async fn send_typing(&self) {
@@ -832,6 +896,47 @@ mod tests {
         );
         assert!(messages.contains(&"[pi-agent-connect] thinking level set to high".to_string()));
         assert!(messages.contains(&"[pi-agent-connect] available levels: off, high".to_string()));
+    }
+    #[tokio::test(start_paused = true)]
+    async fn transient_send_failure_retries_and_blocks_until_delivered() {
+        // Prompt a's reply fails transiently twice, then succeeds. The worker
+        // must retry until it is delivered, and must NOT start prompt b before
+        // that — fail-closed: no blind execution while replies cannot be sent.
+        let events = Arc::new(StdMutex::new(Vec::new()));
+        let agent = FakeAgent::with_events(events.clone());
+        agent.reply("r1");
+        agent.reply("r2");
+        let chat = FakeChat::with_events(events.clone());
+        chat.fail_sends_transiently_for("r1", 2);
+        let (_, _) = drive(
+            agent,
+            chat,
+            vec![Job::Prompt("a".into()), Job::Prompt("b".into())],
+        )
+        .await;
+
+        let events = events.lock().unwrap().clone();
+        let fails = events
+            .iter()
+            .filter(|e| e.as_str() == "send-fail:r1")
+            .count();
+        assert_eq!(fails, 2, "reply r1 must be retried until success: {events:?}");
+        let delivered = events
+            .iter()
+            .position(|e| e.as_str() == "send-ok:r1")
+            .expect("r1 eventually delivered");
+        let prompt_b = events
+            .iter()
+            .position(|e| e.as_str() == "prompt(fresh=false):b")
+            .expect("prompt b eventually runs");
+        assert!(
+            delivered < prompt_b,
+            "reply for a must be delivered before b executes: {events:?}"
+        );
+        assert!(
+            events.iter().any(|e| e.as_str() == "send-ok:r2"),
+            "reply r2 delivered after recovery: {events:?}"
+        );
     }
 
     #[tokio::test]

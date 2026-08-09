@@ -12,13 +12,16 @@ mod router;
 mod worker;
 
 use agent::{Agent, RealAgent};
-use chat::{Chat, DiscordChat};
+use chat::{
+    classify_serenity_error, next_backoff, send_to_channel, Chat, ChatError, ChatErrorKind,
+    DiscordChat, RETRY_BACKOFF_INITIAL,
+};
 use router::Decision;
 use serenity::async_trait;
 use serenity::client::{Client, Context, EventHandler};
 use serenity::model::channel::Message;
 use serenity::model::gateway::{GatewayIntents, Ready};
-use serenity::model::id::UserId;
+use serenity::model::id::{ChannelId, UserId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -26,6 +29,37 @@ use worker::{Job, Worker};
 
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
+/// Startup greeting gate: call `attempt` until it succeeds.
+///
+/// Transient failures (no HTTP response, 429, 5xx) are retried with
+/// exponential backoff and logged; a permanent failure (definite 4xx refusal)
+/// is returned to the caller, which terminates the process. The bot must not
+/// connect the gateway / start serving before the owner has been greeted.
+async fn greet_with_retry<F, Fut>(mut attempt: F) -> Result<ChannelId, ChatError>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<ChannelId, ChatError>>,
+{
+    let mut delay = RETRY_BACKOFF_INITIAL;
+    let mut attempt_no: u32 = 0;
+    loop {
+        match attempt().await {
+            Ok(channel_id) => return Ok(channel_id),
+            Err(e) if e.kind == ChatErrorKind::Transient => {
+                attempt_no += 1;
+                tracing::warn!(
+                    attempt = attempt_no,
+                    error = %e.detail,
+                    ?delay,
+                    "greeting failed (transient), retrying"
+                );
+                tokio::time::sleep(delay).await;
+                delay = next_backoff(delay);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
 fn init_tracing() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -152,8 +186,12 @@ async fn main() {
         .await
         .expect("failed to build Discord client");
 
-    // Startup: open the owner's DM channel and announce (skipped in lockdown mode).
-    let mut dchat = DiscordChat::new(client.http.clone());
+    // Startup gate: open the owner's DM channel and announce. This must succeed
+    // before the bot connects the gateway and starts serving — a bot that could
+    // not greet its owner must not present itself as online. Transient failures
+    // (network, 429, 5xx) are retried with backoff; permanent ones (401/403/...)
+    // exit the process. Skipped entirely in lockdown mode (no whitelist).
+    let mut dchat = DiscordChat::new(client.http.clone(), config.allowed_user.is_none());
     match &config.allowed_user {
         Some(user) => {
             let uid: u64 = match user.parse() {
@@ -165,17 +203,41 @@ async fn main() {
                     std::process::exit(1);
                 }
             };
-            match UserId::new(uid).create_dm_channel(&client.http).await {
-                Ok(dm) => {
-                    dchat.set_channel(dm.id);
-                    let msg = format::startup(&config.cwd.display().to_string(), user);
-                    if let Err(e) = dchat.send(format::system(&msg)).await {
-                        tracing::error!(error = %e.0, "failed to send startup message");
-                    }
-                    tracing::info!(user = %user, "startup message sent");
+            // The greeting attempt owns everything it needs; the channel is
+            // wired into `dchat` only after the greeting is confirmed.
+            let http = client.http.clone();
+            let user_owned = user.clone();
+            let user_log = user_owned.clone();
+            let cwd = config.cwd.clone();
+            let greeted = greet_with_retry(move || {
+                let http = http.clone();
+                let user = user_owned.clone();
+                let cwd = cwd.clone();
+                async move {
+                    let dm = UserId::new(uid)
+                        .create_dm_channel(&http)
+                        .await
+                        .map_err(|e| ChatError {
+                            kind: classify_serenity_error(&e),
+                            detail: e.to_string(),
+                        })?;
+                    let msg = format::system(&format::startup(
+                        &cwd.display().to_string(),
+                        &user,
+                    ));
+                    send_to_channel(http, dm.id, &msg).await?;
+                    Ok(dm.id)
+                }
+            })
+            .await;
+            match greeted {
+                Ok(channel_id) => {
+                    dchat.set_channel(channel_id);
+                    tracing::info!(user = %user_log, "startup message sent");
                 }
                 Err(e) => {
-                    tracing::error!(error = %e, "failed to create DM channel with owner");
+                    tracing::error!(error = %e.detail, "greeting failed (permanent), exiting");
+                    std::process::exit(1);
                 }
             }
         }
@@ -230,5 +292,49 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {}
         _ = terminate => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn greet_with_retry_retries_transient_failures_then_succeeds() {
+        let mut attempts = 0u32;
+        let result = greet_with_retry(|| {
+            attempts += 1;
+            async move {
+                if attempts < 3 {
+                    Err(ChatError {
+                        kind: ChatErrorKind::Transient,
+                        detail: "network blip".into(),
+                    })
+                } else {
+                    Ok(ChannelId::new(1))
+                }
+            }
+        })
+        .await;
+        assert!(result.is_ok());
+        assert_eq!(attempts, 3, "transient failures must be retried");
+    }
+
+    #[tokio::test]
+    async fn greet_with_retry_returns_permanent_failure_immediately() {
+        let mut attempts = 0u32;
+        let result = greet_with_retry(|| {
+            attempts += 1;
+            async move {
+                Err(ChatError {
+                    kind: ChatErrorKind::Permanent,
+                    detail: "403: cannot message this user".into(),
+                })
+            }
+        })
+        .await;
+        let err = result.unwrap_err();
+        assert_eq!(err.kind, ChatErrorKind::Permanent);
+        assert_eq!(attempts, 1, "permanent failure must not be retried");
     }
 }
