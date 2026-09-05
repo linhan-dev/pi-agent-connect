@@ -27,8 +27,6 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use worker::{Job, Worker};
 
-const PROMPT_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-
 /// Startup greeting gate: call `attempt` until it succeeds.
 ///
 /// Transient failures (no HTTP response, 429, 5xx) are retried with
@@ -250,7 +248,7 @@ async fn main() {
 
     let agent = Arc::new(RealAgent::new("pi".to_string(), config.cwd.clone()));
     let dchat = Arc::new(dchat);
-    let worker = Worker::new(agent.clone(), dchat.clone(), PROMPT_TIMEOUT, rx);
+    let worker = Worker::new(agent.clone(), dchat.clone(), config.prompt_timeout, rx);
     let worker_task = tokio::spawn(worker.run());
 
     // Graceful shutdown: announce, abort the running task, drain, disconnect.
