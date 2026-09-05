@@ -66,7 +66,8 @@
    `PIAC_COMMAND_PREFIX` (optional) leave unset; commands default to `.`.
 
    `PIAC_PROMPT_TIMEOUT` (optional) max seconds one pi run may take per message;
-   defaults to 3600 (1 hour). On timeout the task is aborted and you're notified.
+   defaults to 3600 (1 hour). Valid range 1–604800 (7 days max); `0` (no cap)
+   is rejected on purpose. On timeout the task is aborted and you're notified.
 
    Keep the exports in `~/.zshrc` so you don't retype them every time.
 
