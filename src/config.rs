@@ -218,20 +218,37 @@ mod tests {
     /// every test that reads or mutates the process environment through it.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    /// Take the env lock, tolerating poisoning: a panicking test unwinds
+    /// through its guard and poisons the mutex, so a bare unwrap would cascade
+    /// panics into every later env-touching test. Recover the guard instead.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// Snapshot/restore helper for tests that touch the process env. Each such
-    /// test must hold [`ENV_LOCK`] and leave the variables it touched exactly
-    /// as the ambient shell had them — the ambient shell may export any
-    /// `PIAC_*` var (the README tells users to), and tests must not depend on
-    /// that one way or the other.
-    struct EnvSnapshot(Vec<(&'static str, Option<String>)>);
+    /// test must hold [`env_lock`]; the ambient shell may export any `PIAC_*`
+    /// var (the README tells users to), so tests must not depend on that one
+    /// way or the other.
+    struct EnvSnapshot {
+        saved: Vec<(&'static str, Option<String>)>,
+    }
 
     impl EnvSnapshot {
         fn capture(names: &[&'static str]) -> Self {
-            EnvSnapshot(names.iter().map(|n| (*n, std::env::var(n).ok())).collect())
+            EnvSnapshot {
+                saved: names
+                    .iter()
+                    .map(|n| (*n, std::env::var(n).ok()))
+                    .collect(),
+            }
         }
+    }
 
-        fn restore(&self) {
-            for (name, value) in &self.0 {
+    /// Restore on drop — also on panic — so a failed assertion cannot leak a
+    /// mutated environment into the tests that run after it.
+    impl Drop for EnvSnapshot {
+        fn drop(&mut self) {
+            for (name, value) in &self.saved {
                 unsafe {
                     match value {
                         Some(v) => std::env::set_var(name, v),
@@ -278,11 +295,11 @@ mod tests {
 
     #[test]
     fn summary_masks_token_and_shows_user() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_lock();
         // The "(defaulted to 1 hour…)" source text only holds while the var is
         // unset; the invoking shell may export it (the README tells users to),
         // which would otherwise flake this assertion. Pin it to unset.
-        let snapshot = EnvSnapshot::capture(&["PIAC_PROMPT_TIMEOUT"]);
+        let _snapshot = EnvSnapshot::capture(&["PIAC_PROMPT_TIMEOUT"]);
         unsafe { std::env::remove_var("PIAC_PROMPT_TIMEOUT") };
         let c = Config {
             discord_token: "super-secret-token".to_string(),
@@ -305,13 +322,12 @@ mod tests {
         assert!(s.contains("PIAC_PROMPT_TIMEOUT"));
         assert!(s.contains("3600s  (defaulted to 1 hour (3600s))"));
         assert!(s.contains(".  (optional, default: '.')"));
-        snapshot.restore();
     }
 
     #[test]
     fn summary_reports_env_sourced_timeout() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let snapshot = EnvSnapshot::capture(&["PIAC_PROMPT_TIMEOUT"]);
+        let _guard = env_lock();
+        let _snapshot = EnvSnapshot::capture(&["PIAC_PROMPT_TIMEOUT"]);
         unsafe { std::env::set_var("PIAC_PROMPT_TIMEOUT", "7200") };
         let c = Config {
             discord_token: "super-secret-token".to_string(),
@@ -325,7 +341,6 @@ mod tests {
             s.contains("7200s  (from PIAC_PROMPT_TIMEOUT)"),
             "env-sourced timeout must be labelled as such: {s}"
         );
-        snapshot.restore();
     }
 
     #[test]
@@ -392,20 +407,19 @@ mod tests {
 
     #[test]
     fn load_missing_token_fails() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_lock();
         // Must fail fast on a missing token even if the invoking shell exported one.
-        let snapshot = EnvSnapshot::capture(&["PIAC_DISCORD_TOKEN"]);
+        let _snapshot = EnvSnapshot::capture(&["PIAC_DISCORD_TOKEN"]);
         unsafe { std::env::remove_var("PIAC_DISCORD_TOKEN") };
         let err = Config::load().unwrap_err();
         assert!(err.contains("PIAC_DISCORD_TOKEN is required"), "{err}");
-        snapshot.restore();
     }
 
     #[test]
     fn load_bad_prefix_fails_fast() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_lock();
         // Pin every fail-fast var so the error can only come from the prefix.
-        let snapshot = EnvSnapshot::capture(&[
+        let _snapshot = EnvSnapshot::capture(&[
             "PIAC_DISCORD_TOKEN",
             "PIAC_COMMAND_PREFIX",
             "PIAC_PROMPT_TIMEOUT",
@@ -417,13 +431,12 @@ mod tests {
         }
         let err = Config::load().unwrap_err();
         assert!(err.contains("single character"), "{err}");
-        snapshot.restore();
     }
 
     #[test]
     fn load_bad_timeout_fails_fast() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let snapshot = EnvSnapshot::capture(&[
+        let _guard = env_lock();
+        let _snapshot = EnvSnapshot::capture(&[
             "PIAC_DISCORD_TOKEN",
             "PIAC_COMMAND_PREFIX",
             "PIAC_PROMPT_TIMEOUT",
@@ -435,13 +448,12 @@ mod tests {
         }
         let err = Config::load().unwrap_err();
         assert!(err.contains("cannot be 0"), "{err}");
-        snapshot.restore();
     }
 
     #[test]
     fn load_oversized_timeout_fails_fast() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let snapshot = EnvSnapshot::capture(&[
+        let _guard = env_lock();
+        let _snapshot = EnvSnapshot::capture(&[
             "PIAC_DISCORD_TOKEN",
             "PIAC_COMMAND_PREFIX",
             "PIAC_PROMPT_TIMEOUT",
@@ -456,6 +468,5 @@ mod tests {
             err.contains(&format!("at most {MAX_PROMPT_TIMEOUT_SECS} seconds")),
             "{err}"
         );
-        snapshot.restore();
     }
 }
