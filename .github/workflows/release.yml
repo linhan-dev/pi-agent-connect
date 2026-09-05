@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-14
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Build (release)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package tarball
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/pi-agent-connect" dist/pi-agent-connect
+          tar -C dist -czf "pi-agent-connect-${{ matrix.target }}.tar.gz" pi-agent-connect
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: pi-agent-connect-*.tar.gz
+          generate_release_notes: true
+
+      - name: Upload artifact (workflow_dispatch only)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-agent-connect-${{ matrix.target }}
+          path: pi-agent-connect-${{ matrix.target }}.tar.gz
+
+  update-tap:
+    name: trigger tap formula update
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch repository event to tap repo
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -n "$TAP_TOKEN" ]; then
+            GH_TOKEN="$TAP_TOKEN" gh api -X POST \
+              repos/linhan-dev/homebrew-pi-agent-connect/dispatches \
+              -f event_type=release
+            echo "tap update dispatched"
+          else
+            echo "TAP_TOKEN secret not set; tap update skipped. Set the secret, or run the tap's update-formula workflow manually."
+          fi
